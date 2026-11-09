@@ -10,7 +10,9 @@ Lookup order for one artist:
   1. by the artist's Spotify URL (a URL relation some MusicBrainz artists carry);
   2. otherwise by name, accepting only a score-100 result whose name matches exactly
      (case-insensitive), so a namesake or a near match never gives wrong genres.
-Then the artist's genres are read (its top tags when it has no genres yet).
+Then the artist's genres are read. Only MusicBrainz's curated genres: its free-form tags are
+noise ("2008 universal fire victim", "christmas"), so an artist with genres but no curated
+genre stays without one.
 """
 from __future__ import annotations
 
@@ -31,7 +33,6 @@ MIN_INTERVAL = 1.1          # seconds between requests (MusicBrainz allows 1/s)
 _MAX_TRIES = 5
 _MAX_BACKOFF = 60.0
 _MAX_GENRES = 10
-_MAX_TAGS = 5               # the fallback when an artist has no genres, only free-form tags
 
 
 class MusicBrainzError(RuntimeError):
@@ -141,10 +142,9 @@ class MusicBrainzClient:
         return matches[0] if len(matches) == 1 else None
 
     def genres_of(self, mbid: str) -> list[str]:
-        """Genres of a MusicBrainz artist, most voted first; its top tags when it has no genres."""
-        doc = self._get(f"artist/{mbid}", inc="genres+tags") or {}
-        genres = _names(doc.get("genres"), _MAX_GENRES)
-        return genres or _names(doc.get("tags"), _MAX_TAGS)
+        """Curated genres of a MusicBrainz artist, most voted first (free-form tags are ignored)."""
+        doc = self._get(f"artist/{mbid}", inc="genres") or {}
+        return _names(doc.get("genres"), _MAX_GENRES)
 
     def lookup(self, spotify_id: str, name: str) -> Found | None:
         """Genres for one artist, or None when MusicBrainz has no trustworthy match or no genres."""

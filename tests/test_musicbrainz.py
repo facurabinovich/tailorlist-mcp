@@ -122,10 +122,11 @@ def test_search_query_escapes_quotes(clock):
     assert s.calls[1][1]["query"] == 'artist:"Say \\"Hi\\""'
 
 
-def test_falls_back_to_top_tags_when_there_are_no_genres(clock):
-    tags = {"tags": [{"name": f"t{i}", "count": i} for i in range(8)]}
+def test_free_form_tags_are_never_used_as_genres(clock):
+    tags = {"tags": [{"name": "2008 universal fire victim", "count": 3}, {"name": "christmas", "count": 2}]}
     s = FakeSession({"url": FakeResponse(body={"relations": [{"artist": {"id": "m"}}]}), "artist/m": FakeResponse(body=tags)})
-    assert client(s, clock).lookup("sp", "X").genres == ["t7", "t6", "t5", "t4", "t3"]
+    assert client(s, clock).lookup("sp", "X") is None
+    assert s.calls[-1][1]["inc"] == "genres"
     empty = FakeSession({"url": FakeResponse(body={"relations": [{"artist": {"id": "m"}}]}), "artist/m": FakeResponse(body={})})
     assert client(empty, clock).lookup("sp", "X") is None
 
