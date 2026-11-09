@@ -54,9 +54,13 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
 
 ## Phases
 
-1. **Skeleton.** FastMCP stdio server, OAuth with the user's app (token cached), SQLite
-   collection cache. Tools: `list_my_playlists`, `load_playlists`, `collection_summary`.
-   Connected to Claude Desktop and Claude Code.
+1. **Skeleton.** Done 2026-11-09. MCP stdio server (`mcp` 2.x `MCPServer`), PKCE login with
+   the user's app (no client secret), SQLite cache that re-reads a playlist only when its
+   snapshot changes. Tools: `connect_spotify`, `list_my_playlists`, `load_playlists`,
+   `collection_summary`, `forget_my_data`. Connected to Claude Code and Claude Desktop (via
+   `wsl.exe`). Real run: 22 playlists, 4,547 entries, 4,239 unique tracks, 1,990 artists
+   loaded in 18 s (pages of 100, artists 50 per call, 4 playlists in parallel); 636 artists
+   (792 tracks) have no Spotify genres.
 2. **Analysis.** Genre families (Spotify + MusicBrainz), duplicates, playlist comparison,
    `cluster` (by genre family, by category, KMeans). Tool shapes from the archived
    `agent/tools.py` of the Streamlit app.
