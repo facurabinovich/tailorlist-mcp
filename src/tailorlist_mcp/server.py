@@ -20,9 +20,13 @@ from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 INSTRUCTIONS = """\
 Tailorlist reads, analyzes and reorganizes the user's own Spotify playlists.
 
-Workflow: list_my_playlists -> load_playlists (copies them into a local cache) ->
-collection_summary. If a tool says the user isn't connected, call connect_spotify and give
-the user the link it returns.
+Workflow: list_my_playlists -> ask the user which playlists to load -> load_playlists
+(copies them into a local cache) -> collection_summary. If a tool says the user isn't
+connected, call connect_spotify and give the user the link it returns.
+
+Never pick playlists to load on your own, and never load all of them unless the user says
+so: show the list and ask which ones. Playlists already in the cache ("current") don't need
+loading again.
 
 Data comes from Spotify. When you mention playlists or tracks, include their Spotify links
 where the tool gave you one.
@@ -85,6 +89,9 @@ def connect_spotify() -> str:
 def list_my_playlists() -> dict:
     """The user's Spotify playlists: id, name, track count, whether they own it, its link, and
     whether it is already in the local cache ("current", "changed" since loading, or null).
+
+    Show the list to the user and ask which playlists they want to load before calling
+    load_playlists.
     """
     client = _client()
     with closing(store.connect()) as conn:
@@ -95,8 +102,11 @@ def list_my_playlists() -> dict:
 async def load_playlists(playlists: list[str], ctx: Context, force: bool = False) -> dict:
     """Copy playlists from Spotify into the local cache so they can be analyzed.
 
+    Only load the playlists the user chose. If they haven't said which ones, ask them first
+    (list_my_playlists shows the options); don't load all of them unless they ask for that.
+
     Args:
-        playlists: playlist IDs or Spotify playlist links (from list_my_playlists).
+        playlists: playlist IDs or Spotify playlist links of the playlists the user chose.
         force: re-read playlists even if they haven't changed since the last load.
 
     Returns per-playlist results and the collection size. Playlists that haven't changed are
