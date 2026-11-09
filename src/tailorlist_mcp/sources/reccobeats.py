@@ -1,23 +1,15 @@
-"""ReccoBeats audio-features client and the local fallback DB (no Streamlit).
+"""ReccoBeats audio-features client.
 
-Moved from pipeline/enrich.py when the Demo Collection ETL was removed: these are the
-pieces the Your Collection enrichment still uses.
   - fetch_audio_features: two-step ReccoBeats lookup for one Spotify track ID.
-  - fetch_fallback_features: audio features from the local SQLite fallback DB
-    (data/audio_fallback.db) for tracks ReccoBeats doesn't have.
   - map_audio_features: ReccoBeats response -> flat audio-feature dict.
 """
 
 import logging
-import os
 import re
-import sqlite3
 
 import requests
 
 logger = logging.getLogger(__name__)
-
-_FALLBACK_DB = os.path.join(os.path.dirname(__file__), "..", "data", "audio_fallback.db")
 
 _LOOKUP_ENDPOINT   = "https://api.reccobeats.com/v1/track"
 _FEATURES_ENDPOINT = "https://api.reccobeats.com/v1/track/{reccobeats_id}/audio-features"
@@ -78,43 +70,6 @@ def fetch_audio_features(spotify_id: str) -> tuple[dict | None, str]:
     except ValueError:
         logger.warning("ReccoBeats step-2 invalid JSON for %s", spotify_id)
         return None, "fail"
-
-
-def fetch_fallback_features(spotify_id: str) -> dict | None:
-    """
-    Try to recover audio features from local SQLite fallback DB.
-    Returns a mapped dict compatible with map_audio_features output, or None if not found.
-    """
-    if not os.path.exists(_FALLBACK_DB):
-        return None
-    try:
-        conn = sqlite3.connect(_FALLBACK_DB)
-        cursor = conn.execute(
-            "SELECT energy, acousticness, valence, tempo, danceability, "
-            "loudness, instrumentalness, speechiness, liveness, mode, duration_ms "
-            "FROM audio_features WHERE spotify_id = ?",
-            (spotify_id,)
-        )
-        row = cursor.fetchone()
-        conn.close()
-        if row is None:
-            return None
-        return {
-            "energy":           row[0],
-            "acousticness":     row[1],
-            "valence":          row[2],
-            "tempo":            row[3],
-            "danceability":     row[4],
-            "loudness":         row[5],
-            "instrumentalness": row[6],
-            "speechiness":      row[7],
-            "liveness":         row[8],
-            "mode":             row[9],
-            "duration_ms":      row[10],
-        }
-    except Exception as exc:
-        logger.warning("Fallback DB lookup failed for %s: %s", spotify_id, exc)
-        return None
 
 
 def map_audio_features(spotify_id: str, data: dict) -> dict | None:

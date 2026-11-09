@@ -14,8 +14,12 @@ Audience: portfolio/visibility and people actually using it. Not monetized.
 - **Writes are safe:** preview before writing; create and edit playlists, never delete them.
 - **Genres:** Spotify first, MusicBrainz for the artists Spotify leaves empty. Last.fm maybe
   later (needs a per-user API key, noisier tags).
-- **Audio features:** ReccoBeats; the Kaggle-derived fallback DB is optional and its licence
-  must be checked before shipping it.
+- **Audio features:** ReccoBeats only, cached, with backoff on 429. No fallback DB (see below).
+- **Local first.** The main goal is using it on my own machine. Publishing goes ahead with
+  the Spotify AI-clause risk stated in the README; Spotify is asked in parallel.
+- **Spotify terms in the design:** the SQLite store is a refreshable cache, not an archive;
+  a tool deletes all cached data; tool results link back to Spotify; no "Spotify" or "Spot..."
+  in the name; personal, non-commercial use.
 
 ## What we measured
 
@@ -57,12 +61,33 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
    `cluster` (by genre family, by category, KMeans). Tool shapes from the archived
    `agent/tools.py` of the Streamlit app.
 3. **Write.** `create_playlist(name, track_ids)`, `add_tracks`, `remove_tracks`, with preview.
-4. **Audio features.** ReccoBeats, optional fallback download, Audio DNA.
+4. **Audio features.** ReccoBeats, Audio DNA.
 5. **Launch.** README with the Spotify app walkthrough, `uvx` install, Claude Desktop
-   extension if feasible, 2-minute demo video, post.
+   extension if feasible, 2-minute demo video, post. README states the Spotify AI-clause
+   risk.
+
+## Terms and licences (checked 2026-11-09)
+
+- **Kaggle fallback DB: dropped.** It came from "Spotify 1.2M+ Songs"
+  (kaggle.com/datasets/rodolfofigueroa/spotify-12m-songs, 2020). Its licence is "Unknown"
+  and the data was pulled from the Spotify API, so redistributing it would also break
+  Spotify Developer Terms IV.3.1 (no databases of Spotify Content).
+- **ReccoBeats** (Terms of Service, 2026-05-25): free, no API key, allowed for "personal and
+  commercial projects", no attribution required. Rate limits are unpublished (429 +
+  `Retry-After`) and the service can change or shut down without notice.
+- **Spotify** (Developer Terms v10 and Developer Policy, effective 2025-05-15):
+  - Policy III.14 / Terms IV.2.1: no training on Spotify Content "or otherwise ingest Spotify
+    Content into a machine learning or AI model". "Ingest" is not defined; whether an LLM
+    reading track names in a conversation counts is unclear. **Open risk; asked Spotify.**
+  - Terms IV.3.1-2: no compilations or databases, no indefinite storage; local caching only
+    temporary and "strictly necessary".
+  - Policy I.1.2: users must be able to disconnect; delete their data.
+  - Policy II.4: attribute content to Spotify and link back to the album, playlist or track.
+  - Policy VI.2 / Terms VII.1.3: the name can't start with "Spot" or include "Spotify".
+  - Terms III.1.1 / Policy IV.2: private personal use, no commercial use.
 
 ## Open questions
 
-- Licence of the Kaggle-derived audio-feature fallback DB.
-- ReccoBeats terms of use.
-- Spotify developer terms about using API data with AI.
+- Spotify's answer on the AI clause (new thread in the Spotify for Developers forum, where
+  developer.spotify.com/support sends policy questions). A clear answer is unlikely: staff usually point back to
+  the Developer Policy.

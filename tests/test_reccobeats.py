@@ -1,8 +1,7 @@
-"""spotify/reccobeats: ReccoBeats client and fallback DB (moved from pipeline/enrich.py in T28).
+"""sources/reccobeats: ReccoBeats client.
 
 HTTP is mocked: conftest blocks real outgoing requests.
 """
-import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -77,33 +76,3 @@ class TestMapAudioFeatures:
     def test_unparseable_values_become_none(self):
         out = rb.map_audio_features("sp1", {"energy": "high", "valence": 0.2})
         assert out["energy"] is None and out["valence"] == 0.2
-
-
-class TestFetchFallbackFeatures:
-    def test_missing_db_returns_none(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(rb, "_FALLBACK_DB", str(tmp_path / "nope.db"))
-        assert rb.fetch_fallback_features("sp1") is None
-
-    def test_reads_row_from_fallback_db(self, tmp_path, monkeypatch):
-        db = tmp_path / "fb.db"
-        conn = sqlite3.connect(db)
-        conn.execute(
-            "CREATE TABLE audio_features (spotify_id TEXT, energy REAL, acousticness REAL, "
-            "valence REAL, tempo REAL, danceability REAL, loudness REAL, instrumentalness REAL, "
-            "speechiness REAL, liveness REAL, mode INTEGER, duration_ms INTEGER)"
-        )
-        conn.execute("INSERT INTO audio_features VALUES ('sp1',0.1,0.2,0.3,100,0.4,-5,0.0,0.05,0.1,1,200000)")
-        conn.commit(); conn.close()
-        monkeypatch.setattr(rb, "_FALLBACK_DB", str(db))
-        assert rb.fetch_fallback_features("sp1") == {
-            "energy": 0.1, "acousticness": 0.2, "valence": 0.3, "tempo": 100,
-            "danceability": 0.4, "loudness": -5, "instrumentalness": 0.0,
-            "speechiness": 0.05, "liveness": 0.1, "mode": 1, "duration_ms": 200000,
-        }
-        assert rb.fetch_fallback_features("unknown") is None
-
-    def test_broken_db_returns_none(self, tmp_path, monkeypatch):
-        db = tmp_path / "broken.db"
-        db.write_text("not a sqlite file")
-        monkeypatch.setattr(rb, "_FALLBACK_DB", str(db))
-        assert rb.fetch_fallback_features("sp1") is None

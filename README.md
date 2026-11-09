@@ -24,6 +24,15 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
   come from ReccoBeats.
 - It previews every change before writing, and never deletes a playlist.
 
+## Spotify's terms
+
+Spotify's Developer Terms forbid using Spotify content "to train a machine learning or AI model
+or otherwise ingest Spotify Content into a machine learning or AI model". This tool trains
+nothing, but it does show your track and artist names to Claude, and Spotify hasn't said
+whether that counts. You use it with your own Spotify app, under your own developer account,
+for personal use. Read the [Developer Terms](https://developer.spotify.com/terms) and decide
+for yourself.
+
 ## Origin
 
 The analysis code (`src/tailorlist_mcp/analysis/`) is ported from the Tailorlist Streamlit app.
