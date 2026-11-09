@@ -1,0 +1,355 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg:#121212; --panel:#181818; --card:#282828; --line:#333; --text:#fff; --muted:#B3B3B3;
+    --dim:#888; --accent:#1DB954; --brand:#8FBF7A;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { padding:20px 18px 16px; }
+  a { color:inherit; text-decoration:none; cursor:pointer; }
+  a:hover { text-decoration:underline; }
+  .brand { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:6px 16px;
+    border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:18px; }
+  .wordmark { font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }
+  .wordmark span { color:var(--brand); }
+  .tagline { color:var(--dim); font-size:.88rem; font-style:italic; margin-left:10px; }
+  .title { color:var(--muted); font-size:.8rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+  .loaded { color:var(--muted); font-size:.82rem; margin:-8px 0 16px; }
+  .grid { display:grid; gap:10px; }
+  .kpis { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
+  .two { grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; min-width:0; }
+  .icon { font-size:1.3rem; }
+  .label { color:var(--muted); font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+  .value { font-size:1.75rem; font-weight:800; line-height:1.1; margin-top:6px; }
+  .sub { color:var(--muted); font-size:.75rem; margin-top:2px; }
+  .big { font-size:1.15rem; font-weight:800; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .year { color:var(--accent); font-weight:700; margin-top:6px; }
+  .stats { display:flex; flex-wrap:wrap; gap:14px 40px; }
+  .stats .v { font-size:1.15rem; font-weight:800; color:var(--accent); }
+  h2 { font-size:1.1rem; margin:26px 0 4px; }
+  .hint { color:var(--muted); font-size:.8rem; margin:0 0 12px; }
+  .bars .row { display:grid; grid-template-columns:minmax(90px, 32%) 1fr 48px; gap:10px; align-items:center;
+    font-size:.82rem; padding:3px 0; }
+  .bars .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bars .track { background:var(--line); border-radius:4px; height:10px; }
+  .bars .fill { background:var(--accent); border-radius:4px; height:10px; }
+  .bars .num { text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .cols { display:flex; align-items:flex-end; gap:6px; height:170px; padding-top:18px; }
+  .cols .col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
+  .cols .bar { width:100%; background:var(--accent); border-radius:5px 5px 0 0; min-height:2px; position:relative; }
+  .cols .bar span { position:absolute; top:-17px; left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--muted); white-space:nowrap; }
+  .cols .lab { font-size:.7rem; color:var(--muted); margin-top:6px; white-space:nowrap; }
+  .cols.dense .lab { font-size:.6rem; }
+  .rank { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:8px; }
+  .rank .top { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
+  .rank .top .v { color:var(--accent); font-weight:800; }
+  .rank .meter { background:var(--line); border-radius:4px; height:5px; margin:8px 0 5px; }
+  .rank .meter div { background:var(--accent); height:5px; border-radius:4px; }
+  .rank .foot { color:var(--muted); font-size:.75rem; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { border-radius:999px; padding:5px 11px; font-size:.78rem; border:1px solid var(--line); }
+  .chip b { font-weight:700; margin-left:4px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:6px 8px; border-bottom:1px solid #222; vertical-align:top; }
+  .timeline { width:100%; height:150px; display:block; }
+  .foot-note { color:var(--dim); font-size:.72rem; margin-top:26px; border-top:1px solid var(--line); padding-top:10px; }
+  .hl { padding:14px 16px; }
+  .hl .label { color:var(--accent); }
+  .hl .nm { font-weight:700; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hl .val { color:var(--accent); font-weight:800; margin-top:5px; }
+  .plname { font-size:1.5rem; font-weight:800; margin:0 0 14px; letter-spacing:-0.02em; }
+  .cover { text-align:center; }
+  .cover .pct { font-size:2.2rem; font-weight:800; color:var(--accent); }
+  .cols .col.pick { cursor:pointer; }
+  .cols .col.pick:hover .bar, .cols .col.on .bar { background:#25d163; }
+  .drill { margin-top:14px; }
+  .drill .tt { color:var(--accent); font-weight:700; font-size:.9rem; margin-bottom:6px; }
+  .scroll { max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+  .scroll table { margin:0; }
+  .scroll th { position:sticky; top:0; background:var(--panel); }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.d { white-space:nowrap; }
+  .note { color:var(--dim); font-size:.78rem; margin-top:8px; }
+  .empty { color:var(--muted); padding:30px 0; text-align:center; }
+</style>
+</head>
+<body>
+<div class="brand">
+  <div><span class="wordmark">Tailorlist<span>.</span></span><span class="tagline">Music, made to measure.</span></div>
+  <div class="title">Playlist detail</div>
+</div>
+<div id="app"><div class="empty">Loading the playlist…</div></div>
+<script id="tailorlist-data" type="application/json">null</script>
+<script>
+(() => {
+  // ---------------------------------------------------------------- MCP Apps bridge
+  let nextId = 1;
+  const pending = new Map();
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params });
+  });
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const openLink = (url) => request("ui/open-link", { url }).catch(() => {});
+
+  function reportSize() {
+    const el = document.documentElement;
+    notify("ui/notifications/size-changed", { width: el.scrollWidth, height: el.scrollHeight });
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(msg.error) : resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") {
+      const result = msg.params || {};
+      let data = result.structuredContent;
+      if (!data && result.content && result.content[0] && result.content[0].text) {
+        try { data = JSON.parse(result.content[0].text); } catch (e) {}
+      }
+      if (data) render(data);
+    } else if (msg.method === "ui/resource-teardown" && msg.id !== undefined) {
+      send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-url]");
+    if (a) { e.preventDefault(); openLink(a.dataset.url); }
+  });
+
+  // ---------------------------------------------------------------- helpers
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const fmt = (n) => (typeof n === "number" ? n.toLocaleString("en-US") : (n ?? "—"));
+  // Inside Claude (MCP App) links go through ui/open-link; as a standalone page they are plain links.
+  const standalone = window.parent === window;
+  const link = (text, url) => !url ? esc(text)
+    : standalone ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`
+    : `<a data-url="${esc(url)}" href="#">${esc(text)}</a>`;
+  const medals = ["🥇", "🥈", "🥉", "4.", "5."];
+
+  const kpi = (icon, label, value, sub) =>
+    `<div class="card"><div class="icon">${icon}</div><div class="label">${label}</div>
+     <div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+
+  function bars(items, nameOf, valueOf, urlOf) {
+    const max = Math.max(1, ...items.map(valueOf));
+    return `<div class="bars">${items.map((it) => `
+      <div class="row"><div class="name" title="${esc(nameOf(it))}">${link(nameOf(it), urlOf && urlOf(it))}</div>
+      <div class="track"><div class="fill" style="width:${(valueOf(it) / max * 100).toFixed(1)}%"></div></div>
+      <div class="num">${fmt(valueOf(it))}</div></div>`).join("")}</div>`;
+  }
+
+  function columns(items, labelOf, valueOf, dense) {
+    const max = Math.max(1, ...items.map(valueOf));
+    return `<div class="cols${dense ? " dense" : ""}">${items.map((it) => `
+      <div class="col"><div class="bar" style="height:${(valueOf(it) / max * 100).toFixed(1)}%"><span>${fmt(valueOf(it))}</span></div>
+      <div class="lab">${esc(labelOf(it))}</div></div>`).join("")}</div>`;
+  }
+
+  function ranking(items, titleOf, subOf, valueOf, footOf, maxValue) {
+    return items.map((it, i) => `
+      <div class="rank"><div class="top"><span>${medals[i] || ""} ${titleOf(it)}</span><span class="v">${valueOf(it)}</span></div>
+      ${subOf ? `<div class="sub">${subOf(it)}</div>` : ""}
+      <div class="meter"><div style="width:${Math.min(100, it._bar / maxValue * 100).toFixed(0)}%"></div></div>
+      <div class="foot">${footOf(it)}</div></div>`).join("");
+  }
+
+  function genreChips(genres) {
+    const max = Math.max(1, ...genres.map((g) => g.tracks));
+    return `<div class="chips">${genres.map((g) => {
+      const a = 0.12 + 0.6 * (g.tracks / max);
+      return `<span class="chip" style="background:rgba(29,185,84,${a.toFixed(2)})">${esc(g.genre)}<b>${fmt(g.tracks)}</b></span>`;
+    }).join("")}</div>`;
+  }
+
+  function timeline(points) {
+    if (!points.length) return "";
+    const w = 700, h = 150, pad = 18;
+    const max = Math.max(1, ...points.map((p) => p.tracks));
+    const step = (w - pad * 2) / Math.max(1, points.length - 1);
+    const xy = points.map((p, i) => [pad + i * step, h - pad - (p.tracks / max) * (h - pad * 2)]);
+    const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${h - pad} L${pad},${h - pad} Z`;
+    const first = points[0].month, last = points[points.length - 1].month;
+    return `<svg class="timeline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <path d="${area}" fill="rgba(29,185,84,.18)"/><path d="${line}" fill="none" stroke="#1DB954" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      </svg><div class="sub" style="display:flex;justify-content:space-between"><span>${esc(first)}</span><span>peak ${fmt(max)} tracks in a month</span><span>${esc(last)}</span></div>`;
+  }
+
+  function dupTable(items, cols) {
+    if (!items.length) return `<div class="sub">None.</div>`;
+    return `<table><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr>${items.map((it) =>
+      `<tr>${cols.map((c) => `<td>${esc(it[c[1]])}</td>`).join("")}</tr>`).join("")}</table>`;
+  }
+
+  // ---------------------------------------------------------------- render
+  let current = null;
+
+  const hlCard = (label, c) => !c ? "" :
+    `<div class="card hl"><div class="label">${label}</div><div class="nm">${link(c.name, c.url)}</div>
+     <div class="sub">${esc(c.artist)}</div><div class="val">${esc(c.value)}</div></div>`;
+
+  function areaChart(points, labelOf, valueOf, peakText) {
+    if (!points.length) return "";
+    const w = 700, h = 150, pad = 18;
+    const max = Math.max(1, ...points.map(valueOf));
+    const step = (w - pad * 2) / Math.max(1, points.length - 1);
+    const xy = points.map((p, i) => [pad + i * step, h - pad - (valueOf(p) / max) * (h - pad * 2)]);
+    const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${h - pad} L${pad},${h - pad} Z`;
+    return `<svg class="timeline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <path d="${area}" fill="rgba(29,185,84,.18)"/><path d="${line}" fill="none" stroke="#1DB954" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      </svg><div class="sub" style="display:flex;justify-content:space-between"><span>${esc(labelOf(points[0]))}</span><span>${esc(peakText)}</span><span>${esc(labelOf(points[points.length - 1]))}</span></div>`;
+  }
+
+  function dupTable(items, cols) {
+    if (!items.length) return `<div class="sub">None.</div>`;
+    return `<table><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr>${items.map((it) =>
+      `<tr>${cols.map((c) => `<td>${esc(it[c[1]])}</td>`).join("")}</tr>`).join("")}</table>`;
+  }
+
+  function drill(decade) {
+    const d = current && current.decade_tracks[decade];
+    if (!d) return "";
+    const more = d.total > d.items.length ? ` (the ${d.items.length} most popular)` : "";
+    return `<div class="tt">📅 ${d.total} track${d.total === 1 ? "" : "s"} from the ${decade}s${more}</div>
+      <div class="scroll"><table><tr><th>Track</th><th>Artist</th><th class="n">Year</th><th class="n">Popularity</th></tr>
+      ${d.items.map((t) => `<tr><td>${esc(t.track)}</td><td>${esc(t.artist)}</td><td class="n">${esc(t.year || "")}</td><td class="n">${esc(t.popularity ?? "")}</td></tr>`).join("")}</table></div>`;
+  }
+
+  document.addEventListener("click", (e) => {
+    const col = e.target.closest(".col.pick");
+    if (!col) return;
+    document.querySelectorAll(".col.pick").forEach((c) => c.classList.toggle("on", c === col));
+    document.getElementById("drill").innerHTML = drill(col.dataset.decade);
+    reportSize();
+  });
+
+  function render(data) {
+    const app = document.getElementById("app");
+    current = data;
+    if (data.empty || !data.kpis) {
+      app.innerHTML = `<div class="empty">${data.name ? esc(data.name) + " has no tracks in the cache." : "Nothing to show yet. Ask Claude to show a playlist."}</div>`;
+      reportSize();
+      return;
+    }
+    const k = data.kpis, a = data.averages, h = data.highlights, d = data.duplicates, g = data.growth;
+    let html = `<div class="plname">${link(data.name, data.url)}</div>`;
+
+    html += `<div class="grid kpis">
+      ${kpi("🎵", "Tracks", fmt(k.tracks), k.hours != null ? `${fmt(k.hours)} hours` : "")}
+      ${kpi("🎤", "Artists", fmt(k.artists), "primary only")}
+      ${kpi("👥", "Followers", k.followers == null ? "—" : fmt(k.followers))}
+      ${kpi("📅", "First added", esc(k.first_added))}
+      ${kpi("🆕", "Last added", esc(k.last_added))}
+    </div>`;
+
+    html += `<h2>Track highlights</h2><p class="hint">Standout tracks at the extremes of duration, popularity and release year.</p>
+      <div class="grid two">
+        ${hlCard("⏱️ Longest", h.longest)}${hlCard("⚡ Shortest", h.shortest)}
+        ${hlCard("⭐ Most popular", h.most_popular)}${hlCard("💀 Least popular", h.least_popular)}
+        ${hlCard("📻 Oldest", h.oldest)}${hlCard("✨ Newest", h.newest)}
+      </div>`;
+
+    html += `<h2>Averages</h2><div class="grid kpis">
+      ${kpi("⏱️", "Avg duration", a.duration ?? "N/A")}
+      ${kpi("⭐", "Avg popularity", a.popularity ?? "N/A", "Spotify 0–100")}
+      ${kpi("📅", "Avg release year", a.release_year ?? "N/A")}
+      ${kpi("🎤", "Top artist", `<span style="font-size:1.15rem">${esc(a.top_artist)}</span>`, `${a.top_artist_tracks} tracks`)}
+    </div>`;
+
+    const ta = data.top_artists;
+    html += `<h2>Top artists</h2><p class="hint">The most represented primary artists; featured artists aren't counted.</p>
+      <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(150px,1fr)"><div>
+      ${ta.items.map((it, i) => `<div class="rank"><div class="top"><span>${medals[i] || ""} ${esc(it.name)}</span><span class="v">${it.tracks} tracks</span></div>
+        <div class="meter"><div style="width:${(it.tracks / ta.items[0].tracks * 100).toFixed(0)}%"></div></div></div>`).join("")}
+      </div><div class="card cover"><div class="pct">${ta.covered_pct}%</div><div class="label">of the playlist</div>
+      <div class="sub">covered by the top ${ta.items.length} artists</div></div></div>`;
+
+    html += `<h2>Duplicates inside this playlist</h2><div class="grid two">
+      <div class="card"><div class="label">Same Spotify track saved more than once</div><div class="value">${fmt(d.exact.count)}</div>
+        <div style="margin-top:10px">${dupTable(d.exact.items, [["Track", "track"], ["Artist", "artist"], ["Times", "times"]])}</div></div>
+      <div class="card"><div class="label">Same song, different versions</div><div class="value">${fmt(d.versions.count)}</div>
+        <div class="sub">Same name and artist under different Spotify IDs.</div>
+        <div style="margin-top:10px">${dupTable(d.versions.items, [["Track", "track"], ["Artist", "artist"], ["Versions", "versions"]])}</div></div>
+      </div>${d.exact.count > d.exact.items.length || d.versions.count > d.versions.items.length ? `<div class="note">Showing the first ${d.exact.items.length}. Ask Claude for find_duplicates to see them all.</div>` : ""}`;
+
+    if (data.decades.length || data.years.length) {
+      html += `<h2>Era</h2><p class="hint">Tracks by the album's release year. Click a decade to see its tracks.</p>
+        <div class="grid two"><div>
+          <div class="label" style="margin-bottom:4px">By decade</div>
+          <div class="cols">${data.decades.map((x) => {
+            const max = Math.max(1, ...data.decades.map((y) => y.tracks));
+            return `<div class="col pick" data-decade="${x.decade}"><div class="bar" style="height:${(x.tracks / max * 100).toFixed(1)}%"><span>${fmt(x.tracks)}</span></div><div class="lab">${x.decade}s</div></div>`;
+          }).join("")}</div></div>
+          <div><div class="label" style="margin-bottom:4px">By year</div>
+          ${areaChart(data.years, (y) => y.year, (y) => y.tracks, "peak " + Math.max(...data.years.map((y) => y.tracks)) + " tracks in a year")}</div>
+        </div><div class="drill" id="drill"></div>`;
+    }
+
+    if (data.genres.length) {
+      html += `<h2>Top genres</h2><p class="hint">Exact Spotify (or MusicBrainz) tags of each track's primary artist, counted per entry.</p>${genreChips(data.genres)}`;
+    }
+
+    html += `<h2>Playlist growth</h2><p class="hint">When tracks were added: built all at once, or grown over time.</p>`;
+    if (g.peak) {
+      html += areaChart(g.timeline, (p) => p.month, (p) => p.tracks, "peak " + g.peak.tracks + " tracks in a month") +
+        `<div class="sub" style="margin-top:6px;color:var(--accent);font-weight:700">📆 ${fmt(k.tracks)} tracks · ${g.months} active months · peak in ${esc(g.peak.label)} (${g.peak.tracks} tracks)</div>`;
+    } else if (g.single_session) {
+      html += `<div class="card"><div class="icon">⚡</div><div style="font-weight:700;margin:4px 0">Built in a single session</div>
+        <div class="sub">All ${fmt(k.tracks)} tracks were added on <b style="color:var(--accent)">${esc(g.single_session)}</b>: assembled all at once and never touched again.</div></div>`;
+    } else {
+      html += `<div class="sub">Not enough date data to show a growth timeline.</div>`;
+    }
+
+    const shown = data.tracks.length;
+    html += `<h2>All tracks</h2><p class="hint">In playlist order.</p><div class="scroll"><table>
+      <tr><th class="n">#</th><th>Track</th><th>Artist</th><th>Album</th><th class="n">Year</th><th class="n">Duration</th><th class="n">Pop</th><th>Added</th></tr>
+      ${data.tracks.map((t) => `<tr><td class="n">${t.n}</td><td>${link(t.track, t.url)}</td><td>${esc(t.artist)}</td><td>${esc(t.album)}</td>
+        <td class="n">${esc(t.year || "")}</td><td class="n">${esc(t.duration || "")}</td><td class="n">${esc(t.popularity ?? "")}</td><td class="d">${esc(t.added)}</td></tr>`).join("")}
+      </table></div>`;
+    if (data.tracks_total > shown) {
+      html += `<div class="note">Showing the first ${shown} of ${fmt(data.tracks_total)} tracks. The page saved on your computer lists them all; or ask Claude for get_playlist_tracks.</div>`;
+    }
+
+    html += `<div class="foot-note">Data from Spotify. Names link to Spotify.</div>`;
+    app.innerHTML = html;
+    reportSize();
+  }
+
+  if (standalone) {
+    let embedded = null;
+    try { embedded = JSON.parse(document.getElementById("tailorlist-data").textContent); } catch (e) {}
+    if (embedded) render(embedded);
+    return;
+  }
+
+  new ResizeObserver(reportSize).observe(document.body);
+
+  request("ui/initialize", {
+    protocolVersion: "2025-06-18",
+    appInfo: { name: "tailorlist-playlist", version: "0.1.0" },
+    appCapabilities: {},
+  }).then(() => notify("ui/notifications/initialized"))
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>

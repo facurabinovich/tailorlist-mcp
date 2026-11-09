@@ -15,8 +15,12 @@ import sqlite3
 
 import pandas as pd
 
+from tailorlist_mcp import store
 from tailorlist_mcp.analysis import comparison
+from tailorlist_mcp.analysis import duplicates as dup
 from tailorlist_mcp.analysis import overview as ov
+from tailorlist_mcp.analysis import playlist_detail as pd_core
+from tailorlist_mcp.analysis.formatting import fmt_duration
 from tailorlist_mcp.analysis.tracks import add_artist_display, parse_release_year
 
 TOP_N = 20
@@ -26,7 +30,7 @@ def records(conn: sqlite3.Connection) -> list[dict]:
     """One dict per playlist entry, shaped like the Streamlit app's session records."""
     artists_by_track: dict[str, list[sqlite3.Row]] = {}
     for r in conn.execute(
-        "SELECT ta.track_id, ta.position, a.name, a.genres FROM track_artists ta "
+        "SELECT ta.track_id, ta.position, a.name, a.genres, a.mb_genres FROM track_artists ta "
         "JOIN artists a ON a.id = ta.artist_id ORDER BY ta.track_id, ta.position"
     ):
         artists_by_track.setdefault(r["track_id"], []).append(r)
@@ -39,7 +43,8 @@ def records(conn: sqlite3.Connection) -> list[dict]:
     ):
         artists = artists_by_track.get(r["id"], [])
         primary = artists[0] if artists else None
-        genres = _genres(primary["genres"]) if primary else []
+        # Spotify's genres, else MusicBrainz's (only looked up for artists Spotify left empty).
+        genres = (_genres(primary["genres"]) or _genres(primary["mb_genres"])) if primary else []
         out.append({
             "id": r["id"],
             "name": r["name"],
@@ -188,6 +193,7 @@ def overview_data(conn: sqlite3.Connection, current_year: int | None = None) -> 
         ),
         "genres": _rows(ov.top_genres(ov.genre_track_counts(df), 30), {"genre": "genre", "track_count": "tracks"}),
         "untagged": {"tracks": untagged_count, "percent": untagged_pct},
+        "musicbrainz": _musicbrainz_info(conn),
         "decades": [
             {"decade": int(r["decade"]), "tracks": int(r["count"])}
             for _, r in ov.decade_distribution(deduped).iterrows()
@@ -208,6 +214,14 @@ def overview_data(conn: sqlite3.Connection, current_year: int | None = None) -> 
     }
 
 
+def _musicbrainz_info(conn: sqlite3.Connection) -> dict:
+    """How many primary artists Spotify left without genres, and how many MusicBrainz filled in."""
+    import time
+    from tailorlist_mcp import genre_fill
+    c = store.mb_counts(conn, int(time.time()), genre_fill.RETRY_AFTER)
+    return {"without_spotify_genres": c["total"], "filled": c["found"], "pending": c["pending"]}
+
+
 def model_summary(data: dict) -> str:
     """Short text for Claude (the dashboard carries the full data)."""
     if data.get("empty"):
@@ -226,6 +240,12 @@ def model_summary(data: dict) -> str:
     lines.append("Top genres (sub-genres counted, e.g. 'rock' includes 'indie rock'): "
                  + ", ".join(f"{g['genre']} ({g['tracks']})" for g in data["genres"][:8])
                  + f". {data['untagged']['tracks']} tracks ({data['untagged']['percent']}%) have no genre.")
+    mbz = data.get("musicbrainz") or {}
+    if mbz.get("filled"):
+        lines.append(f"{mbz['filled']} artists got their genres from MusicBrainz (Spotify had none).")
+    if mbz.get("pending"):
+        lines.append(f"{mbz['pending']} artists without Spotify genres haven't been looked up: fill_genres can fill them "
+                     "from MusicBrainz in the background (it takes a few minutes per hundred artists).")
     lines.append("Decades: " + ", ".join(f"{d['decade']}s {d['tracks']}" for d in data["decades"]) + ".")
     d = data["duplicates"]
     lines.append(
@@ -294,4 +314,162 @@ def playlist_track_table(conn: sqlite3.Connection, ref: str, include_links: bool
         if include_links:
             cells.append(row.url or "")
         lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- one playlist (show_playlist)
+
+TOP_ARTISTS_N = 5
+TOP_GENRES_N = 15
+DUPLICATES_SHOWN = 20
+DECADE_TRACKS_SHOWN = 30
+TRACKS_IN_RESULT = 50    # rows of the track table that travel in the tool result (the web page gets them all)
+DECADE_TRACKS_IN_RESULT = 10
+
+
+def _hl_card(row: pd.Series | None, value: str) -> dict | None:
+    if row is None:
+        return None
+    return {"name": row["track_name"], "artist": row["artist_display"], "value": value, "url": row.get("url")}
+
+
+def playlist_data(conn: sqlite3.Connection, ref: str, track_limit: int | None = None,
+                  decade_limit: int = DECADE_TRACKS_SHOWN) -> dict:
+    """Everything the Playlist Detail page showed for one playlist (without its audio sections),
+    computed with the ported analysis/playlist_detail.py. track_limit caps the "all tracks" table and
+    decade_limit the rows listed per decade (smaller for the tool result, full for the web page)."""
+    pl = find_playlist(conn, ref)
+    followers_row = conn.execute("SELECT followers FROM playlists WHERE id = ?", (pl["id"],)).fetchone()
+    followers = followers_row["followers"] if followers_row else None
+    recs = [r for r in records(conn) if r["playlist_name"] == pl["name"]]
+    if not recs:
+        return {"empty": True, "name": pl["name"], "url": pl["url"]}
+    df = tracks_frame(recs)
+    pl_df = pd_core.playlist_tracks(df, pl["name"])          # duration in minutes, as the original page
+    # The original assumes these columns have values; a playlist with none of them would raise.
+    if not pl_df["added_at"].notna().any():
+        pl_df = pl_df.drop(columns="added_at")
+    for col in ("popularity_raw", "duration_raw"):
+        if not pl_df[col].notna().any():
+            pl_df = pl_df.drop(columns=col)
+
+    kpis = pd_core.header_kpis(pl_df, followers or 0)
+    hl = pd_core.track_highlights(pl_df)
+    avgs = pd_core.playlist_averages(pl_df)
+    top = pd_core.top_artists(pl_df, TOP_ARTISTS_N)
+
+    def card(row, fmt):
+        return None if row is None else _hl_card(row, fmt(row))
+
+    raw = dup.drop_missing_ids(dup.raw_records_frame(recs))
+    exact = dup.exact_duplicates(raw, "artist_name")
+    versions = dup.different_versions(raw)
+
+    decades = pd_core.decade_counts(pl_df)
+    years = pd_core.year_counts(pl_df)
+    decade_tracks = {}
+    for d in decades["decade"].tolist() if not decades.empty else []:
+        listing = pd_core.decade_track_listing(pl_df, int(d)).reset_index(drop=True)
+        decade_tracks[str(int(d))] = {
+            "total": len(listing),
+            "items": _rows(listing.head(decade_limit),
+                           {c: o for c, o in {"Track": "track", "Artist": "artist", "Year": "year",
+                                              "Popularity": "popularity"}.items() if c in listing.columns}, 0),
+        }
+
+    genres = pd_core.top_genres(pl_df, TOP_GENRES_N).sort_values("count", ascending=False)
+    monthly = pd_core.monthly_additions(pl_df)
+    growth: dict = {"single_session": None, "timeline": [], "peak": None, "months": len(monthly)}
+    if len(monthly) <= 1:
+        growth["single_session"] = pd_core.single_session_date(pl_df)
+    else:
+        timeline = pd_core.growth_timeline(monthly)
+        peak = pd_core.peak_month(timeline)
+        growth["timeline"] = [{"month": r["period"], "tracks": int(r["count"])} for _, r in timeline.iterrows()]
+        growth["peak"] = {"label": peak.label, "tracks": peak.count}
+
+    pop_complete = "popularity_raw" in pl_df.columns and bool(pl_df["popularity_raw"].notna().all())
+    table = pd_core.track_table(pl_df if pop_complete else pl_df.drop(columns=["popularity_raw"], errors="ignore"))
+    tracks = []
+    for i, (idx, row) in enumerate(table.iterrows(), start=1):
+        src = pl_df.loc[idx]
+        added = src["added_at"][:10] if "added_at" in pl_df.columns and isinstance(src["added_at"], str) else ""
+        if "Popularity" in table.columns:
+            popularity = int(row["Popularity"])
+        else:
+            popularity = int(src["popularity_raw"]) if "popularity_raw" in pl_df.columns and pd.notna(src["popularity_raw"]) else None
+        tracks.append({
+            "n": i, "track": row["Track"], "artist": row["Artist"], "album": src["album_name"] or "",
+            "year": int(row["Year"]) or None, "duration": row.get("Duration"), "popularity": popularity,
+            "added": added, "url": src["url"],
+        })
+    total = len(tracks)
+    if track_limit is not None:
+        tracks = tracks[:track_limit]
+
+    return {
+        "name": pl["name"], "url": pl["url"],
+        "kpis": {
+            "tracks": kpis.total_tracks, "artists": kpis.unique_artists, "followers": followers,
+            "first_added": kpis.first_added, "last_added": kpis.last_added,
+            "hours": round(float(pl_df["duration_raw"].sum()) / 60, 1) if "duration_raw" in pl_df.columns else None,
+        },
+        "highlights": {
+            "longest": card(hl.longest, lambda r: fmt_duration(r["duration_raw"])),
+            "shortest": card(hl.shortest, lambda r: fmt_duration(r["duration_raw"])),
+            "most_popular": card(hl.most_popular, lambda r: f"{int(r['popularity_raw'])} pts"),
+            "least_popular": card(hl.least_popular, lambda r: f"{int(r['popularity_raw'])} pts"),
+            "oldest": card(hl.oldest, lambda r: str(int(r["release_year"]))),
+            "newest": card(hl.newest, lambda r: str(int(r["release_year"]))),
+        },
+        "averages": {
+            "duration": _fmt_duration(avgs.avg_duration) if avgs.avg_duration is not None else None,
+            "popularity": _num(avgs.avg_popularity, 1),
+            "release_year": None if avgs.avg_release_year is None or pd.isna(avgs.avg_release_year) else round(avgs.avg_release_year),
+            "top_artist": avgs.top_artist, "top_artist_tracks": avgs.top_artist_count,
+        },
+        "top_artists": {"items": _rows(top.table, {"artist": "name", "tracks": "tracks"}, 0),
+                        "covered_pct": round(top.covered_pct), "n": TOP_ARTISTS_N},
+        "duplicates": {
+            "exact": {"count": len(exact), "items": _rows(
+                exact.head(DUPLICATES_SHOWN), {"track_name": "track", "artist": "artist", "count": "times"}, 0)},
+            "versions": {"count": len(versions), "items": _rows(
+                versions.head(DUPLICATES_SHOWN), {"track_name": "track", "artist_name": "artist", "n_unique_ids": "versions"}, 0)},
+        },
+        "decades": [{"decade": int(r["decade"]), "tracks": int(r["count"])} for _, r in decades.iterrows()],
+        "years": [{"year": int(r["year"]), "tracks": int(r["count"])} for _, r in years.iterrows()],
+        "decade_tracks": decade_tracks,
+        "genres": _rows(genres, {"genre": "genre", "count": "tracks"}, 0),
+        "growth": growth,
+        "tracks": tracks, "tracks_total": total,
+    }
+
+
+def playlist_summary(data: dict) -> str:
+    """Short text for Claude (the dashboard carries the full data)."""
+    if data.get("empty"):
+        return f"{data['name']} has no tracks in the cache."
+    k, a = data["kpis"], data["averages"]
+    lines = [
+        f"{data['name']}: {k['tracks']} tracks, {k['artists']} primary artists"
+        + (f", {k['hours']} h" if k["hours"] is not None else "")
+        + (f", {k['followers']} followers" if k["followers"] is not None else "")
+        + f". Added {k['first_added']} to {k['last_added']}.",
+        f"Average popularity {a['popularity']}, average release year {a['release_year']}, average duration {a['duration']}. "
+        f"Top artist {a['top_artist']} ({a['top_artist_tracks']} tracks); top 5 cover {data['top_artists']['covered_pct']}% of the playlist.",
+    ]
+    if data["decades"]:
+        lines.append("Decades: " + ", ".join(f"{d['decade']}s {d['tracks']}" for d in data["decades"]) + ".")
+    if data["genres"]:
+        lines.append("Top genres (exact tags, per entry): " + ", ".join(f"{g['genre']} ({g['tracks']})" for g in data["genres"][:6]) + ".")
+    g = data["growth"]
+    if g["peak"]:
+        lines.append(f"Grew over {g['months']} months, peak {g['peak']['label']} ({g['peak']['tracks']} tracks added).")
+    elif g["single_session"]:
+        lines.append(f"Built in a single session on {g['single_session']}.")
+    d = data["duplicates"]
+    lines.append(f"Inside this playlist: {d['exact']['count']} Spotify tracks saved more than once; "
+                 f"{d['versions']['count']} songs saved as different versions.")
+    lines.append("Don't repeat these numbers as a long text. Add a short comment and suggest next steps "
+                 "(find_tracks, collection_stats, find_duplicates, compare_playlists).")
     return "\n".join(lines)

@@ -35,6 +35,7 @@ class FakeClient:
             ],
         }
         self.item_calls = 0
+        self.followers = 7
 
     def me(self):
         return {"id": "me", "display_name": "Facu"}
@@ -52,7 +53,8 @@ class FakeClient:
         if pid not in self.snapshots:
             raise SpotifyError("404")
         return {"id": pid, "name": {PL_A: "Alpha", PL_B: "Beta"}[pid], "owner": {"id": "me"},
-                "snapshot_id": self.snapshots[pid], "external_urls": {"spotify": f"https://x/{pid}"}}
+                "snapshot_id": self.snapshots[pid], "external_urls": {"spotify": f"https://x/{pid}"},
+                "followers": {"total": self.followers}}
 
     def playlist_items(self, pid):
         self.item_calls += 1
@@ -100,6 +102,16 @@ def test_unchanged_playlists_are_skipped_and_changed_ones_reloaded(conn):
     assert out["results"][0]["status"] == "loaded"
     # t3 and ar3 were only in the old Beta: pruned.
     assert out["collection"] == {"playlists": 2, "entries": 3, "unique_tracks": 3, "artists": 3}
+
+
+def test_followers_are_saved_and_refreshed_even_when_the_playlist_is_unchanged(conn):
+    client = FakeClient()
+    collection.load_playlists(client, conn, [PL_A])
+    assert conn.execute("SELECT followers FROM playlists").fetchone()[0] == 7
+    client.followers = 9
+    out = collection.load_playlists(client, conn, [PL_A])
+    assert out["results"][0]["status"] == "unchanged"
+    assert conn.execute("SELECT followers FROM playlists").fetchone()[0] == 9
 
 
 def test_bad_refs_and_api_errors_are_reported_per_playlist(conn):

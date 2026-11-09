@@ -101,6 +101,7 @@ def load_playlists(
             else:
                 name = got["meta"].get("name")
                 if got["unchanged"]:
+                    store.update_followers(conn, got["meta"])
                     results[i] = {"id": pid, "name": name, "status": "unchanged"}
                 else:
                     store.save_playlist(conn, got["meta"], got["rows"], got["skipped"])

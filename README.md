@@ -1,6 +1,6 @@
 # Tailorlist MCP
 
-> Work in progress. Phase 1 works: log in, list playlists, load them, summarize.
+> Work in progress. Phases 1 and 2a work: load playlists, dashboards, stats, searches, duplicates, comparison.
 
 An MCP server that lets Claude read, analyze and reorganize **your own** Spotify library:
 find duplicates across playlists, group thousands of tracks by genre family or by sound,
@@ -36,7 +36,10 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
    For Claude Desktop, add it under `mcpServers` in `claude_desktop_config.json`.
 
 Tools so far: `connect_spotify`, `list_my_playlists`, `load_playlists` (shows the overview
-dashboard after loading), `show_overview`, `get_playlist_tracks`, `forget_my_data`. The
+dashboard after loading), `show_overview`, `show_playlist`, `get_playlist_tracks`,
+`collection_stats` (counts and averages by decade, artist, genre, playlist, month...),
+`find_tracks`, `find_duplicates`, `compare_playlists`, `fill_genres` (MusicBrainz genres for
+artists Spotify leaves empty, in the background, about 1 request per second), `forget_my_data`. The
 dashboard opens in your browser (`~/.tailorlist-mcp/overview.html`; set
 `TAILORLIST_OPEN_BROWSER=0` to turn that off) and is also an MCP App, which Claude Desktop can
 show inside the chat. Everything is stored in `~/.tailorlist-mcp` (`TAILORLIST_HOME` to change it).

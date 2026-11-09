@@ -1,4 +1,4 @@
-"""The overview dashboard as a local web page, opened in the user's browser.
+"""The dashboards (overview, playlist) as local web pages, opened in the user's browser.
 
 Fallback for hosts that don't render MCP Apps (Claude Code, and Claude Desktop 4.23118.0 with
 local servers). Same HTML as the MCP App, with the data embedded.
@@ -18,18 +18,18 @@ from pathlib import Path
 
 from tailorlist_mcp import settings
 
-_TEMPLATE = Path(__file__).parent / "ui" / "overview.html"
+_UI = Path(__file__).parent / "ui"
 _PLACEHOLDER = '<script id="tailorlist-data" type="application/json">null</script>'
 
 
-def page_path() -> Path:
-    return settings.data_dir() / "overview.html"
+def page_path(kind: str = "overview") -> Path:
+    return settings.data_dir() / f"{kind}.html"
 
 
-def write_page(data: dict, path: Path | None = None) -> Path:
-    """Write the dashboard with `data` embedded. Returns the file path."""
-    path = path or page_path()
-    html = _TEMPLATE.read_text(encoding="utf-8")
+def write_page(data: dict, path: Path | None = None, kind: str = "overview") -> Path:
+    """Write the dashboard (ui/<kind>.html) with `data` embedded. Returns the file path."""
+    path = path or page_path(kind)
+    html = (_UI / f"{kind}.html").read_text(encoding="utf-8")
     # "</" inside JSON would end the script tag early.
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     html = html.replace(_PLACEHOLDER, f'<script id="tailorlist-data" type="application/json">{payload}</script>')

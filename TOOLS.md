@@ -35,7 +35,7 @@ dashboards, data tools for everything else).
 | `list_my_playlists` | Home: add playlists by URL | ✅ |
 | `load_playlists(playlists, force)` | Home: review + load; opens the overview | ✅ |
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
-| `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | 2a |
+| `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | ✅ |
 | `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
 
 ### Dashboards (fixed views)
@@ -43,7 +43,7 @@ dashboards, data tools for everything else).
 | Tool | Original page | Phase |
 |---|---|---|
 | `show_overview` | Overview: KPIs, oldest/newest, listening age, tracks per playlist, top artists, decades, popularity, most popular artists, favourite albums, genres, additions over time, duplicates | ✅ (audio averages ⏳4) |
-| `show_playlist(playlist)` | Playlist Detail, see the 2a check below | 2a |
+| `show_playlist(playlist)` | Playlist Detail, see the 2a check below | ✅ |
 | `show_draft(draft)` | Cluster Results: one card per group, unmatched tracks | 2b |
 
 ### Data tools (Claude answers and charts)
@@ -51,10 +51,10 @@ dashboards, data tools for everything else).
 | Tool | What | Phase |
 |---|---|---|
 | `get_playlist_tracks(playlist)` | every track of a playlist, in order (Playlist Detail "All Tracks") | ✅ |
-| `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | 2a |
-| `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | 2a |
-| `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | 2a |
-| `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | 2a |
+| `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | ✅ |
+| `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
+| `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
+| `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | ✅ |
 
 ### Building playlists (My Clusters + Cluster Results)
 

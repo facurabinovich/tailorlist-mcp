@@ -70,7 +70,7 @@ class SpotifyClient:
         return list(self.paged("me/playlists", limit=50))
 
     def playlist(self, playlist_id: str) -> dict:
-        return self.get(f"playlists/{playlist_id}", fields="id,name,owner(id,display_name),snapshot_id,external_urls")
+        return self.get(f"playlists/{playlist_id}", fields="id,name,owner(id,display_name),snapshot_id,external_urls,followers(total)")
 
     def playlist_items(self, playlist_id: str) -> Iterator[dict]:
         return self.paged(f"playlists/{playlist_id}/items", limit=100)

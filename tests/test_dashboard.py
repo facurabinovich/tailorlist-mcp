@@ -65,3 +65,41 @@ def test_playlist_track_table(conn):
 
 def test_flag_emoji_names_match_their_letters():
     assert dashboard._match_key("🇨🇰7") == "ck7"
+
+
+def test_playlist_data_follows_the_playlist_detail_page(conn):
+    d = dashboard.playlist_data(conn, "beta")
+    json.dumps(d)
+    assert d["kpis"]["tracks"] == 4 and d["kpis"]["artists"] == 2          # AR1 and AR3 (primary only)
+    assert d["kpis"]["followers"] == 7
+    assert d["averages"]["top_artist"] == "AR1" and d["averages"]["top_artist_tracks"] == 2
+    assert d["top_artists"]["items"] == [{"name": "AR1", "tracks": 2}, {"name": "AR3", "tracks": 2}]
+    assert d["top_artists"]["covered_pct"] == 100
+    assert d["highlights"]["oldest"]["value"] == "1987" and d["highlights"]["newest"]["value"] == "2010"
+    assert d["duplicates"]["exact"]["count"] == 1 and d["duplicates"]["exact"]["items"][0]["track"] == "Three"
+    assert d["duplicates"]["versions"]["count"] == 1 and d["duplicates"]["versions"]["items"][0]["versions"] == 2
+    assert [x["decade"] for x in d["decades"]] == [1980, 1990, 2010]
+    assert d["decade_tracks"]["1990"]["items"][0]["track"] == "Two"
+    assert d["growth"]["peak"] is None and d["growth"]["single_session"] == "February 01, 2024"   # only one dated entry
+    assert [t["track"] for t in d["tracks"]] == ["Two", "Three", "Three", "Two"] and d["tracks_total"] == 4
+    assert d["tracks"][0]["duration"] == "3:00" and d["tracks"][0]["popularity"] == 50
+
+    capped = dashboard.playlist_data(conn, "beta", track_limit=2)
+    assert len(capped["tracks"]) == 2 and capped["tracks_total"] == 4
+    assert "Beta: 4 tracks" in dashboard.playlist_summary(d)
+
+
+def test_playlist_without_dates_or_popularity_does_not_break(conn):
+    with conn:
+        conn.execute("UPDATE playlist_tracks SET added_at = NULL WHERE playlist_id = ?", (PL_A,))
+        conn.execute("UPDATE tracks SET popularity = NULL")
+    d = dashboard.playlist_data(conn, "alpha")
+    assert d["kpis"]["first_added"] == "N/A" and d["growth"]["single_session"] is None
+    assert d["highlights"]["most_popular"] is None and d["tracks"][0]["popularity"] is None
+
+
+def test_overview_reports_musicbrainz_fill(conn):
+    store.save_mb_result(conn, "ar3", ["folk"], "url", 1)   # AR3 has no Spotify genres (FakeClient)
+    d = dashboard.overview_data(conn)
+    assert d["musicbrainz"] == {"without_spotify_genres": 1, "filled": 1, "pending": 0}
+    assert "1 artists got their genres from MusicBrainz" in dashboard.model_summary(d)

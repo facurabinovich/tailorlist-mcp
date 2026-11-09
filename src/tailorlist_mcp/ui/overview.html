@@ -256,7 +256,8 @@
 
     if (data.genres.length) {
       html += `<h2>Top genres</h2><p class="hint">Spotify tags of the primary artist. Sub-genres count too: "rock" includes "indie rock".
-        ${data.untagged.tracks ? `${fmt(data.untagged.tracks)} tracks (${data.untagged.percent}%) have no genre.` : ""}</p>`;
+        ${data.untagged.tracks ? `${fmt(data.untagged.tracks)} tracks (${data.untagged.percent}%) have no genre.` : ""}
+        ${data.musicbrainz && data.musicbrainz.filled ? `${fmt(data.musicbrainz.filled)} artists got their genres from MusicBrainz (Spotify had none).` : ""}</p>`;
       html += genreChips(data.genres);
     }
 
