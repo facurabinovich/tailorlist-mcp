@@ -16,7 +16,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, genre_fill, queries, settings, store
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, genre_fill, progress, queries, settings, store
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -30,8 +30,10 @@ same for one playlist. If a tool says the user isn't connected, call connect_spo
 the user the link it returns.
 
 Never pick playlists to load on your own, and never load all of them unless the user says
-so: show the list and ask which ones. Playlists already in the cache ("current") don't need
-loading again.
+so: show the list and ask which ones. If the user asks to load playlists that are already in
+the cache ("current"), still call load_playlists: unchanged playlists are skipped instantly,
+followers are refreshed and the overview opens. To take playlists out of the analysis, use
+unload_playlists (it never touches Spotify).
 
 After a dashboard opens, don't repeat its numbers as a long text: add a short comment and
 suggest what to look at next. Don't claim a dashboard is on screen: say it was opened in the
@@ -49,6 +51,17 @@ the cache has every track. Don't browse Spotify's website or look for the cache 
   - fill_genres: Spotify leaves many artists without genres; this looks them up in MusicBrainz in
     the background (a few minutes per hundred artists). Offer it when many tracks have no genre;
     don't start it without the user's OK. Call it again to see progress.
+Building new playlists (Phase 2b): load -> pick filters (playlists, decades, genre families) ->
+group_tracks with preview_only=true to see the counts -> group_tracks (mode "category": by decade
+and/or genre family; mode "genres": one group per chosen genre tag) -> the draft opens as a
+dashboard (show_draft shows it again, with no argument the latest) -> review it with the user ->
+edit_draft (rename, move, assign unmatched tracks, drop or merge groups, keep a group visible,
+skip the unmatched) -> (a later phase) write the playlists to Spotify. A draft changes nothing on
+Spotify. RULE: show the user the draft and get their OK before anything is written; never decide
+the groups' final shape or write on your own. Tracks already organized ("done") leave the pool
+of the next grouping; organize_progress shows the % organized; reset_progress DELETES that
+progress: only after the user explicitly agrees (confirm=true). Grouping by audio similarity
+(KMeans) is not available yet (it needs audio features).
 Playlist arguments accept a name, a unique part of a name, an ID or a Spotify link.
 
 Data comes from Spotify. When you mention playlists or tracks, include their Spotify links
@@ -96,6 +109,7 @@ Definitions (use them when the user asks what a number means):
 
 OVERVIEW_URI = "ui://tailorlist/overview.html"
 PLAYLIST_URI = "ui://tailorlist/playlist.html"
+DRAFT_URI = "ui://tailorlist/draft.html"
 
 
 def _client() -> SpotifyClient:
@@ -118,20 +132,22 @@ def _spotify_call(fn):
 
 
 def _dashboard_result(data: dict, intro: str = "", kind: str = "overview", summary: str | None = None,
-                      page_data: dict | None = None) -> CallToolResult:
+                      page_data: dict | None = None, open_browser: bool = True) -> CallToolResult:
     """Full data for the dashboard (structured), a short summary for Claude (text).
 
     The dashboard is also written as a local page and opened in the browser, because some
     hosts don't render MCP Apps (and the server can't tell whether this one did).
     page_data: the same dashboard with more detail than the tool result carries (the web page
     is a local file, so size doesn't matter there).
+    open_browser: False refreshes the page file without opening another tab (edits of a draft).
     """
     parts = [intro] if intro else []
     if not data.get("empty"):
         page = browser.write_page(page_data or data, kind=kind)
-        opened = browser.open_in_browser(page)
+        opened = browser.open_in_browser(page) if open_browser else False
         parts.append(
             (f"Opened the {kind} dashboard in the user's browser" if opened
+             else f"Refreshed the {kind} dashboard page (reload the tab if it is open)" if not open_browser
              else f"Saved the {kind} dashboard as a web page")
             + f" ({page}). Claude Desktop may also show it inside the chat, but it can't be"
             " confirmed from here: don't claim it is on screen; mention the browser page."
@@ -165,6 +181,11 @@ apps.add_html_resource(
     PLAYLIST_URI,
     (Path(__file__).parent / "ui" / "playlist.html").read_text(encoding="utf-8"),
     name="Tailorlist playlist",
+)
+apps.add_html_resource(
+    DRAFT_URI,
+    (Path(__file__).parent / "ui" / "draft.html").read_text(encoding="utf-8"),
+    name="Tailorlist draft",
 )
 
 
@@ -218,6 +239,44 @@ def show_overview() -> CallToolResult:
         return _dashboard_result(dashboard.overview_data(conn))
 
 
+@apps.tool(resource_uri=OVERVIEW_URI)
+def unload_playlists(playlists: list[str]) -> CallToolResult:
+    """Take one or more playlists out of the local cache, so they leave the analysis, and show
+    the overview of what remains. Nothing changes on Spotify: the playlists stay in the user's
+    account and load_playlists brings them back.
+
+    Tracks and artists that no other loaded playlist has leave the cache too, and leave any
+    draft that had them.
+
+    Args:
+        playlists: names (or a unique part of the name), IDs or Spotify links of loaded playlists.
+    """
+    with closing(store.connect()) as conn:
+        found, missing = [], []
+        for ref in playlists:
+            try:
+                found.append(dashboard.find_playlist(conn, ref))
+            except dashboard.PlaylistNotFound as exc:
+                missing.append(str(exc))
+        if missing:
+            raise ToolError(" ".join(missing) + " Nothing was unloaded.")
+        before = collection.overview(conn)
+        store.remove_playlists(conn, list({p["id"] for p in found}))
+        from_drafts = drafts.prune_unloaded_tracks(conn)
+        after = collection.overview(conn)
+        data = dashboard.overview_data(conn)
+    names = ", ".join(dict.fromkeys(p["name"] for p in found))
+    intro = (
+        f"Unloaded from the local cache: {names}. Nothing changed on Spotify. "
+        f"The cache went from {before['playlists']} playlists / {before['unique_tracks']:,} tracks "
+        f"to {after['playlists']} / {after['unique_tracks']:,}."
+        + (f" {from_drafts:,} track entries left the drafts." if from_drafts else "")
+    )
+    if data.get("empty"):
+        return CallToolResult(content=[TextContent(type="text", text=intro + " Nothing is loaded now.")])
+    return _dashboard_result(data, intro)
+
+
 @apps.tool(resource_uri=PLAYLIST_URI)
 def show_playlist(playlist: str) -> CallToolResult:
     """Show the dashboard of one loaded playlist: header numbers, track highlights, averages, top
@@ -235,6 +294,131 @@ def show_playlist(playlist: str) -> CallToolResult:
         except dashboard.PlaylistNotFound as exc:
             raise ToolError(str(exc)) from exc
     return _dashboard_result(data, kind="playlist", summary=dashboard.playlist_summary(data), page_data=full)
+
+
+def _draft_result(conn, d: dict, intro: str = "", open_browser: bool = True) -> CallToolResult:
+    full = drafts.draft_data(conn, d, full=True)
+    data = drafts.result_data(drafts.draft_data(conn, d))
+    return _dashboard_result(data, intro, kind="draft", summary=drafts.summary(data), page_data=full,
+                             open_browser=open_browser)
+
+
+@apps.tool(resource_uri=DRAFT_URI)
+def group_tracks(
+    mode: str,
+    filters: drafts.GroupFilters | None = None,
+    by: str = "both",
+    genres: list[str] | None = None,
+    also_by_decade: bool = False,
+    include_done: bool = False,
+    preview_only: bool = False,
+) -> CallToolResult:
+    """Group the loaded tracks into a draft of new playlists, and open the draft dashboard.
+
+    Workflow: narrow the pool with `filters`, call with preview_only=true to see the counts, then
+    run it. The draft is saved (ID like "d3") and nothing is written to Spotify. Tracks already
+    organized ("done", see organize_progress) are left out unless include_done=true.
+
+    Args:
+        mode: "category" (one group per decade and/or genre family) or "genres" (one group per
+            chosen genre tag). "kmeans" (by audio similarity) comes with audio features, later.
+        filters: playlists, decades and genre_families to narrow the pool before grouping.
+        by: category mode only: "decade", "genre_family" or "both" (e.g. "Rock · 1990s"). A track in
+            several families goes to the first one. Tracks without a genre or a release decade
+            (when that dimension is used) are listed as unmatched, with the reason.
+        genres: genres mode: exact genre tags to make groups for (a track with several chosen tags
+            is in each group). If omitted, filters.genre_families picks every tag of those families;
+            with neither, you get the list of genres in the pool (nothing is saved).
+        also_by_decade: genres mode: also split each genre group by decade ("rock · 1980s").
+        include_done: include tracks already organized.
+        preview_only: don't save a draft; return the pool counts and how many groups/unmatched.
+    """
+    m = mode.strip().lower()
+    if m in ("kmeans", "audio", "audio similarity", "by audio similarity"):
+        raise ToolError("Grouping by audio similarity (KMeans) comes with audio features in a later phase. "
+                        "Use mode='category' or mode='genres' for now.")
+    if m in ("genre", "specific_genres", "by specific genre", "by_genres"):
+        m = "genres"
+    if m not in ("category", "genres"):
+        raise ToolError("mode must be 'category' or 'genres' ('kmeans' comes with audio features).")
+    b = by.strip().lower().replace(" ", "_").replace("-", "_")
+    b = {"genre": "genre_family", "family": "genre_family", "genres": "genre_family"}.get(b, b)
+    if m == "category" and b not in ("decade", "genre_family", "both"):
+        raise ToolError("by must be 'decade', 'genre_family' or 'both'.")
+    with closing(store.connect()) as conn:
+        try:
+            pool, counts = drafts.build_pool(conn, filters, include_done)
+            chosen = [g for g in (genres or []) if g.strip()]
+            if m == "genres" and not chosen:
+                if filters and filters.genre_families:
+                    chosen = drafts.genres_of_families(pool, filters.genre_families)
+                if not chosen:
+                    menu = drafts.genre_menu(pool)
+                    text = (f"Pool: {len(pool):,} tracks. Pick genres (exact tags) for mode='genres', or give "
+                            "filters.genre_families to take all the tags of those families. Genres in the pool by family "
+                            "(tracks, top tags):\n" + "\n".join(
+                                f"- {x['family']}: {x['genres']} tags: "
+                                + ", ".join(f"{t['genre']} ({t['tracks']})" for t in x["top"]) for x in menu))
+                    return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={"preview": {"pool": counts, "genre_menu": menu}})
+            if not len(pool):
+                raise drafts.DraftError("No tracks match those filters" + (" (tracks already organized are left out; include_done=true brings them back)." if counts["done_left_out"] else "."))
+            groups, unmatched = drafts.make_groups(conn, pool, counts, m, b, chosen, also_by_decade)
+            label = drafts._label(b, m == "genres", also_by_decade)
+            if len(groups) > drafts.MAX_GROUPS:
+                raise drafts.DraftError(f"That would make {len(groups)} groups (max {drafts.MAX_GROUPS}): narrow the filters or pick fewer genres.")
+            if preview_only:
+                text = drafts.preview_text(counts, groups, unmatched, label)
+                return CallToolResult(content=[TextContent(type="text", text=text + "\nNothing was saved. Run again without preview_only to make the draft.")],
+                                      structured_content={"preview": {"pool": counts, "groups": len(groups), "unmatched": len(unmatched)}})
+            if not groups:
+                raise drafts.DraftError(drafts.preview_text(counts, groups, unmatched, label) + "\nNo group could be made: adjust the filters or the grouping.")
+            d = drafts.new_draft(conn, m, b, chosen, also_by_decade, counts, groups, unmatched, include_done)
+            return _draft_result(conn, d, intro=drafts.preview_text(counts, groups, unmatched, label))
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError) as exc:
+            raise ToolError(str(exc)) from exc
+
+
+@apps.tool(resource_uri=DRAFT_URI)
+def show_draft(draft: str | None = None) -> CallToolResult:
+    """Show a draft of new playlists as a dashboard (Cluster Results): one card per group with its
+    size, hours, top artists, genres and decades and sample tracks, the unmatched tracks with the
+    reason, and the overall progress bar. The full track lists are on the web page it opens.
+
+    Args:
+        draft: the draft ID ("d3"). Default: the latest one; the text lists the other drafts.
+    """
+    with closing(store.connect()) as conn:
+        try:
+            return _draft_result(conn, drafts.load_draft(conn, draft))
+        except drafts.DraftError as exc:
+            raise ToolError(str(exc)) from exc
+
+
+@apps.tool(resource_uri=DRAFT_URI)
+def edit_draft(draft: str, changes: list[drafts.Change]) -> CallToolResult:
+    """Change a draft, then refresh its page. All the changes are applied in order, or none if one fails.
+    Only the draft (and the organize progress it touches) changes; nothing is written to Spotify.
+
+    Args:
+        draft: the draft ID ("d3").
+        changes: a list of operations, each with an "op":
+          rename {group, to}; move {tracks, to, from_group?, create_if_missing?} between groups;
+          assign {tracks, to} puts unmatched tracks in a group (saved as manual progress, like the
+          original's "Save assignments"); drop_group {group} (its tracks stay in the pool, listed as
+          left out); merge {groups, into?}; keep_visible {group, on?} (its tracks aren't marked done
+          when written); skip_unmatched {} (marks the unmatched tracks without data as done, so they
+          leave the pool); reopen {group} (a done group counts as not done).
+          `tracks` picks tracks by artist, text (in the name), genre, genre_family, decade, year_from/to,
+          popularity, track_ids, reason (unmatched only) or all=true. Group names accept a unique part.
+    """
+    with closing(store.connect()) as conn:
+        try:
+            d = drafts.load_draft(conn, draft)
+            notes = drafts.apply_changes(conn, d, changes)
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError) as exc:
+            raise ToolError(f"Nothing changed. {exc}") from exc
+        intro = f"Draft {d['id']} updated ({len(notes)} change{'s' if len(notes) != 1 else ''}):\n" + "\n".join(f"- {n}" for n in notes)
+        return _draft_result(conn, d, intro=intro, open_browser=False)
 
 
 mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__, extensions=[apps])
@@ -399,6 +583,38 @@ def fill_genres() -> str:
         if not conn.execute("SELECT 1 FROM artists LIMIT 1").fetchone():
             raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
         return genre_fill.describe(genre_fill.FILL.start(conn))
+
+
+@mcp.tool()
+def organize_progress() -> str:
+    """How much of the collection is organized: tracks already placed in a playlist built from a
+    draft ("done", or skipped on purpose) or assigned to a group by hand ("manual") count toward the
+    % of the library organized. Done tracks are left out of the next group_tracks. Reads the cache only.
+    """
+    with closing(store.connect()) as conn:
+        return progress.describe(conn)
+
+
+@mcp.tool()
+def reset_progress(confirm: bool = False) -> str:
+    """DESTRUCTIVE for the user's organize progress: forgets which tracks are organized (done and
+    manual), so every track is back in the pool and the % goes to 0. Only the progress is cleared:
+    drafts, the cache and Spotify are untouched. Ask the user first; with confirm=false it only says
+    what would be cleared.
+
+    Args:
+        confirm: true only after the user agreed to clear their progress.
+    """
+    with closing(store.connect()) as conn:
+        s = progress.summary(conn)
+        n = conn.execute("SELECT COUNT(*) FROM cluster_progress").fetchone()[0]
+        if not n:
+            return "There is no progress to reset."
+        if not confirm:
+            return (f"Not reset. This would clear {n:,} progress rows ({s['percent']}% of the library organized, "
+                    f"{s['done']:,} done and {s['manual']:,} manual) and can't be undone. If the user agrees, "
+                    "call reset_progress with confirm=true.")
+        return f"Progress reset: {progress.reset(conn):,} rows cleared. Drafts, the cache and Spotify were not touched."
 
 
 @mcp.tool()

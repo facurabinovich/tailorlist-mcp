@@ -34,6 +34,7 @@ dashboards, data tools for everything else).
 | `connect_spotify` | (new: the app used its own Spotify app) | ✅ |
 | `list_my_playlists` | Home: add playlists by URL | ✅ |
 | `load_playlists(playlists, force)` | Home: review + load; opens the overview | ✅ |
+| `unload_playlists(playlists)` | (new, asked by Facu) take playlists out of the local cache and the drafts; Spotify untouched; shows the overview of what remains | ✅ |
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
 | `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | ✅ |
 | `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
@@ -44,7 +45,7 @@ dashboards, data tools for everything else).
 |---|---|---|
 | `show_overview` | Overview: KPIs, oldest/newest, listening age, tracks per playlist, top artists, decades, popularity, most popular artists, favourite albums, genres, additions over time, duplicates | ✅ (audio averages ⏳4) |
 | `show_playlist(playlist)` | Playlist Detail, see the 2a check below | ✅ |
-| `show_draft(draft)` | Cluster Results: one card per group, unmatched tracks | 2b |
+| `show_draft(draft)` | Cluster Results: one card per group, unmatched tracks | ✅ |
 
 ### Data tools (Claude answers and charts)
 
@@ -60,9 +61,9 @@ dashboards, data tools for everything else).
 
 | Tool | Replaces | Phase |
 |---|---|---|
-| `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | 2b (KMeans 4) |
-| `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | 2b |
-| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | 2b (marking done on write: 3) |
+| `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | ✅ (KMeans ⏳4) |
+| `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | ✅ |
+| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | ✅ (marking done on write: ⏳3, hook `drafts.mark_group_written`) |
 | `create_playlist(name, tracks or draft group, description)` | export to Spotify (the app used Spotlistr); always previews and asks first | 3 |
 | `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | 3 |
 | `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | 3 |
@@ -134,7 +135,7 @@ Mode (Alt7: 5, JC: 19).
 2. Analysis without audio, in two parts:
    - **2a.** `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`,
      `compare_playlists`, `show_playlist`, metric definitions in the instructions.
-   - **2b.** `group_tracks` (category and genre modes), `show_draft`, `edit_draft`,
+   - **2b ✅.** `group_tracks` (category and genre modes), `show_draft`, `edit_draft`,
      `organize_progress` / `reset_progress`.
 3. Write: `create_playlist`, `add_tracks`, `remove_tracks`, `export_tracks`.
 4. Audio: `fetch_audio_features`, KMeans mode, audio metrics in the data tools and dashboards.

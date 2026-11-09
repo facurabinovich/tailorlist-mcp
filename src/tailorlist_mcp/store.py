@@ -65,6 +65,19 @@ CREATE TABLE IF NOT EXISTS jobs (          -- background jobs, one row each: kee
     heartbeat INTEGER NOT NULL,
     error     TEXT
 );
+CREATE TABLE IF NOT EXISTS cluster_progress (   -- Phase 2b: tracks already organized (the original's user_cluster_progress)
+    track_id     TEXT PRIMARY KEY,
+    status       TEXT NOT NULL CHECK (status IN ('done', 'manual')),
+    cluster_name TEXT,
+    updated_at   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS drafts (              -- Phase 2b: groupings waiting for review (the original's clustering_results)
+    id         TEXT PRIMARY KEY,
+    seq        INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    data       TEXT NOT NULL
+);
 """
 
 # Columns added after the first release: (table, column, type). Applied with ALTER TABLE so existing caches keep their data.

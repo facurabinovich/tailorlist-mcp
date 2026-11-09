@@ -61,7 +61,7 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
    `wsl.exe`). Real run: 22 playlists, 4,547 entries, 4,239 unique tracks, 1,990 artists
    loaded in 18 s (pages of 100, artists 50 per call, 4 playlists in parallel); 636 artists
    (792 tracks) have no Spotify genres.
-2. **Analysis.** (2a done 2026-11-09: `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`, `compare_playlists`, `show_playlist`, metric definitions in the instructions; 2b open.) Genre families (Spotify + MusicBrainz), duplicates, playlist comparison,
+2. **Analysis.** (2a done 2026-11-09: `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`, `compare_playlists`, `show_playlist`, metric definitions in the instructions; 2b done 2026-11-09: `group_tracks` (category and genres modes), `show_draft`, `edit_draft`, `organize_progress`, `reset_progress`; KMeans waits for phase 4.) Genre families (Spotify + MusicBrainz), duplicates, playlist comparison,
    `cluster` (by genre family, by category, KMeans). Tool shapes from the archived
    `agent/tools.py` of the Streamlit app.
 3. **Write.** `create_playlist(name, track_ids)`, `add_tracks`, `remove_tracks`, with preview.

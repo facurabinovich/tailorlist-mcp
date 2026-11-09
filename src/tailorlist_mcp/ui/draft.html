@@ -1,0 +1,282 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg:#121212; --panel:#181818; --card:#282828; --line:#333; --text:#fff; --muted:#B3B3B3;
+    --dim:#888; --accent:#1DB954; --brand:#8FBF7A;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { padding:20px 18px 16px; }
+  a { color:inherit; text-decoration:none; cursor:pointer; }
+  a:hover { text-decoration:underline; }
+  .brand { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:6px 16px;
+    border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:18px; }
+  .wordmark { font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }
+  .wordmark span { color:var(--brand); }
+  .tagline { color:var(--dim); font-size:.88rem; font-style:italic; margin-left:10px; }
+  .title { color:var(--muted); font-size:.8rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+  .loaded { color:var(--muted); font-size:.82rem; margin:-8px 0 16px; }
+  .grid { display:grid; gap:10px; }
+  .kpis { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
+  .two { grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; min-width:0; }
+  .icon { font-size:1.3rem; }
+  .label { color:var(--muted); font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+  .value { font-size:1.75rem; font-weight:800; line-height:1.1; margin-top:6px; }
+  .sub { color:var(--muted); font-size:.75rem; margin-top:2px; }
+  .big { font-size:1.15rem; font-weight:800; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .year { color:var(--accent); font-weight:700; margin-top:6px; }
+  .stats { display:flex; flex-wrap:wrap; gap:14px 40px; }
+  .stats .v { font-size:1.15rem; font-weight:800; color:var(--accent); }
+  h2 { font-size:1.1rem; margin:26px 0 4px; }
+  .hint { color:var(--muted); font-size:.8rem; margin:0 0 12px; }
+  .bars .row { display:grid; grid-template-columns:minmax(90px, 32%) 1fr 48px; gap:10px; align-items:center;
+    font-size:.82rem; padding:3px 0; }
+  .bars .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bars .track { background:var(--line); border-radius:4px; height:10px; }
+  .bars .fill { background:var(--accent); border-radius:4px; height:10px; }
+  .bars .num { text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .cols { display:flex; align-items:flex-end; gap:6px; height:170px; padding-top:18px; }
+  .cols .col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
+  .cols .bar { width:100%; background:var(--accent); border-radius:5px 5px 0 0; min-height:2px; position:relative; }
+  .cols .bar span { position:absolute; top:-17px; left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--muted); white-space:nowrap; }
+  .cols .lab { font-size:.7rem; color:var(--muted); margin-top:6px; white-space:nowrap; }
+  .cols.dense .lab { font-size:.6rem; }
+  .rank { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:8px; }
+  .rank .top { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
+  .rank .top .v { color:var(--accent); font-weight:800; }
+  .rank .meter { background:var(--line); border-radius:4px; height:5px; margin:8px 0 5px; }
+  .rank .meter div { background:var(--accent); height:5px; border-radius:4px; }
+  .rank .foot { color:var(--muted); font-size:.75rem; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { border-radius:999px; padding:5px 11px; font-size:.78rem; border:1px solid var(--line); }
+  .chip b { font-weight:700; margin-left:4px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:6px 8px; border-bottom:1px solid #222; vertical-align:top; }
+  .timeline { width:100%; height:150px; display:block; }
+  .foot-note { color:var(--dim); font-size:.72rem; margin-top:26px; border-top:1px solid var(--line); padding-top:10px; }
+  .hl { padding:14px 16px; }
+  .hl .label { color:var(--accent); }
+  .hl .nm { font-weight:700; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hl .val { color:var(--accent); font-weight:800; margin-top:5px; }
+  .plname { font-size:1.5rem; font-weight:800; margin:0 0 4px; letter-spacing:-0.02em; }
+  .meta { color:var(--muted); font-size:.85rem; margin:0 0 16px; }
+  .prog { background:var(--panel); border:1px solid var(--accent); border-radius:12px; padding:14px 18px; margin:14px 0 4px; }
+  .prog .top { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:.85rem; }
+  .prog .top b { font-size:.95rem; }
+  .prog .bar { background:var(--line); border-radius:6px; height:8px; margin:10px 0 6px; }
+  .prog .bar div { background:var(--accent); height:8px; border-radius:6px; }
+  .prog .foot { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:.75rem; color:var(--muted); }
+  .prog .foot .pc { color:var(--accent); font-weight:700; }
+  .win { background:#1a2e1a; border:2px solid var(--accent); border-radius:16px; padding:26px; text-align:center; margin:14px 0; }
+  .win .t { color:var(--accent); font-size:1.4rem; font-weight:800; }
+  .groups { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); }
+  .gcard { background:var(--card); border:1px solid var(--line); border-left:5px solid var(--accent); border-radius:14px; padding:14px 16px; min-width:0; }
+  .gcard.done { background:#1a2e1a; border-color:var(--accent); }
+  .gcard .gh { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .gcard .gn { font-weight:800; font-size:1rem; overflow-wrap:anywhere; }
+  .gcard .rk { color:var(--dim); font-size:.8rem; font-weight:700; margin-right:8px; }
+  .gcard .sz { color:var(--accent); font-weight:800; white-space:nowrap; }
+  .gcard .gs { color:var(--muted); font-size:.75rem; margin:2px 0 8px; }
+  .gcard .meter { background:var(--line); border-radius:4px; height:5px; margin:6px 0 10px; }
+  .gcard .meter div { height:5px; border-radius:4px; }
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .badge { font-size:.68rem; font-weight:700; padding:2px 8px; border-radius:999px; border:1px solid var(--accent); color:var(--accent); }
+  .badge.warn { border-color:#F5A623; color:#F5A623; }
+  .lbl { color:var(--dim); font-size:.66rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; margin:8px 0 3px; }
+  .gcard .chips .chip { font-size:.72rem; padding:3px 9px; }
+  .dec { display:flex; align-items:flex-end; gap:3px; height:46px; }
+  .dec div { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-size:.58rem; color:var(--muted); min-width:0; max-width:34px; }
+  .dec i { display:block; width:100%; border-radius:3px 3px 0 0; min-height:2px; }
+  .samples { margin:4px 0 0; padding:0; list-style:none; font-size:.78rem; }
+  .samples li { padding:2px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .samples span { color:var(--muted); }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--accent); font-size:.78rem; font-weight:700; }
+  .scroll { max-height:360px; overflow:auto; border:1px solid var(--line); border-radius:10px; margin-top:6px; }
+  .scroll th { position:sticky; top:0; background:var(--panel); }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .warnbox { background:var(--panel); border:1px solid #E8534A; border-radius:10px; padding:10px 16px; margin:0 0 10px; font-size:.85rem; }
+  .warnbox b { color:#E8534A; }
+  .note { color:var(--dim); font-size:.78rem; margin-top:8px; }
+  .empty { color:var(--muted); padding:30px 0; text-align:center; }
+</style>
+</head>
+<body>
+<div class="brand">
+  <div><span class="wordmark">Tailorlist<span>.</span></span><span class="tagline">Music, made to measure.</span></div>
+  <div class="title">Draft playlists</div>
+</div>
+<div id="app"><div class="empty">Loading the draft…</div></div>
+<script id="tailorlist-data" type="application/json">null</script>
+<script>
+(() => {
+  // ---------------------------------------------------------------- MCP Apps bridge
+  let nextId = 1;
+  const pending = new Map();
+  const send = (msg) => window.parent.postMessage(msg, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params });
+  });
+  const notify = (method, params) => send({ jsonrpc: "2.0", method, params: params || {} });
+  const openLink = (url) => request("ui/open-link", { url }).catch(() => {});
+
+  function reportSize() {
+    const el = document.documentElement;
+    notify("ui/notifications/size-changed", { width: el.scrollWidth, height: el.scrollHeight });
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const msg = event.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+    if (msg.id !== undefined && !msg.method && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id);
+      pending.delete(msg.id);
+      msg.error ? reject(msg.error) : resolve(msg.result);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result") {
+      const result = msg.params || {};
+      let data = result.structuredContent;
+      if (!data && result.content && result.content[0] && result.content[0].text) {
+        try { data = JSON.parse(result.content[0].text); } catch (e) {}
+      }
+      if (data) render(data);
+    } else if (msg.method === "ui/resource-teardown" && msg.id !== undefined) {
+      send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-url]");
+    if (a) { e.preventDefault(); openLink(a.dataset.url); }
+  });
+
+  // ---------------------------------------------------------------- helpers
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const fmt = (n) => (typeof n === "number" ? n.toLocaleString("en-US") : (n ?? "—"));
+  const standalone = window.parent === window;
+  const link = (text, url) => !url ? esc(text)
+    : standalone ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`
+    : `<a data-url="${esc(url)}" href="#">${esc(text)}</a>`;
+  const PALETTE = ["#1DB954", "#E8534A", "#4A90D9", "#F5A623", "#B97FE8", "#E8D44A", "#4AE8D4", "#E84A90", "#A8E84A", "#E8934A"];
+  const kpi = (icon, label, value, sub) =>
+    `<div class="card"><div class="icon">${icon}</div><div class="label">${label}</div>
+     <div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+  const chips = (items, nameOf) => items.length
+    ? `<div class="chips">${items.map((x) => `<span class="chip">${esc(nameOf(x))}<b>${fmt(x.tracks)}</b></span>`).join("")}</div>`
+    : `<div class="sub">—</div>`;
+
+  function progressBar(p) {
+    if (!p || !p.total) return "";
+    if (p.complete) return `<div class="win"><div style="font-size:2.4rem">🎉</div><div class="t">Congratulations!</div>
+      <div>You've reorganized your whole collection.</div><div class="sub">${fmt(p.total)} tracks organized</div></div>`;
+    return `<div class="prog"><div class="top"><b>📦 Organize progress</b>
+      <span class="sub">${fmt(p.organized)} of ${fmt(p.total)} tracks organized · ${fmt(p.remaining)} remaining</span></div>
+      <div class="bar"><div style="width:${Math.min(100, p.percent)}%"></div></div>
+      <div class="foot"><span class="pc">${p.percent}% complete</span>
+      <span>${fmt(p.done)} done (placed in a playlist or skipped) · ${fmt(p.manual)} assigned by hand</span></div></div>`;
+  }
+
+  function groupCard(g, i, grouped) {
+    const color = PALETTE[i % PALETTE.length];
+    const pct = grouped ? g.size / grouped * 100 : 0;
+    const maxDec = Math.max(1, ...g.decades.map((d) => d.tracks));
+    const badges = [g.done ? `<span class="badge">✓ Done</span>` : "", g.keep_visible ? `<span class="badge">📌 Kept visible</span>` : "",
+      g.manual ? `<span class="badge warn">${g.manual} assigned by hand</span>` : "",
+      g.missing ? `<span class="badge warn">${g.missing} no longer in the cache</span>` : ""].join("");
+    const tracks = g.tracks ? `<details><summary>All ${fmt(g.tracks.length)} tracks</summary><div class="scroll"><table>
+      <tr><th>Track</th><th>Artist</th><th class="n">Year</th><th>Playlists</th></tr>
+      ${g.tracks.map((t) => `<tr><td>${link(t.name, t.url)}</td><td>${esc(t.artist)}</td><td class="n">${esc(t.year ?? "")}</td><td>${esc((t.playlists || []).join(", "))}</td></tr>`).join("")}
+      </table></div></details>` : "";
+    return `<div class="gcard${g.done ? " done" : ""}" style="border-left-color:${color}">
+      <div class="gh"><div><span class="rk">${String(i + 1).padStart(2, "0")}</span><span class="gn">${esc(g.name)}</span></div><span class="sz">${fmt(g.size)}</span></div>
+      <div class="gs">${fmt(g.size)} track${g.size === 1 ? "" : "s"} · ${g.hours} h · ${pct.toFixed(1)}% of the grouped tracks</div>
+      <div class="meter"><div style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+      ${badges ? `<div class="badges">${badges}</div>` : ""}
+      <div class="lbl">Top artists</div>${chips(g.top_artists, (x) => x.name)}
+      <div class="lbl">Top genres</div>${chips(g.top_genres, (x) => x.genre)}
+      ${g.decades.length > 1 ? `<div class="lbl">Decades</div><div class="dec">${g.decades.map((d) =>
+        `<div title="${d.decade}s: ${d.tracks}"><i style="height:${(d.tracks / maxDec * 100).toFixed(0)}%;background:${color}"></i>${String(d.decade).slice(2)}s</div>`).join("")}</div>`
+        : g.decades.length ? `<div class="lbl">Decade</div><div class="sub">${g.decades[0].decade}s</div>` : ""}
+      ${g.samples.length ? `<div class="lbl">Sample tracks</div><ul class="samples">${g.samples.map((s) =>
+        `<li>${link(s.name, s.url)} <span>· ${esc(s.artist)}${s.year ? ", " + s.year : ""}</span></li>`).join("")}</ul>` : ""}
+      ${tracks}</div>`;
+  }
+
+  function unmatchedSection(title, hint, u, inPage) {
+    if (!u || !u.total) return "";
+    const shown = u.items.length;
+    return `<h2>${title}</h2><p class="hint">${hint}</p>
+      <div class="warnbox"><b>${fmt(u.total)} tracks</b> — ${u.by_reason.map((r) => `${fmt(r.tracks)} ${esc(r.reason)}`).join(" · ")}</div>
+      <div class="scroll"><table><tr><th>Track</th><th>Artist</th>${u.items[0] && u.items[0].year !== undefined ? `<th class="n">Year</th>` : ""}<th>Reason</th></tr>
+      ${u.items.map((t) => `<tr><td>${link(t.name, t.url)}</td><td>${esc(t.artist)}</td>${t.year !== undefined ? `<td class="n">${esc(t.year ?? "")}</td>` : ""}<td>${esc(t.reason)}</td></tr>`).join("")}
+      </table></div>${u.total > shown ? `<div class="note">Showing the first ${shown} of ${fmt(u.total)}. The page saved on your computer lists them all.</div>` : ""}`;
+  }
+
+  // ---------------------------------------------------------------- render
+  function render(data) {
+    const app = document.getElementById("app");
+    if (data.preview) {
+      const p = data.preview;
+      app.innerHTML = `<div class="plname">Preview</div><p class="meta">Nothing was saved yet.</p>` +
+        (p.groups !== undefined ? `<div class="grid kpis">${kpi("🗂️", "Groups", fmt(p.groups))}${kpi("⚠️", "Unmatched", fmt(p.unmatched))}${kpi("🎯", "In the pool", fmt(p.pool.pool))}</div>`
+          : `<div class="empty">Pick genres to group by. Claude has the list.</div>`);
+      reportSize(); return;
+    }
+    if (!data.groups) {
+      app.innerHTML = `<div class="empty">Nothing to show yet. Ask Claude to group your tracks into a draft.</div>`;
+      reportSize(); return;
+    }
+    const t = data.totals, pool = data.pool;
+    const created = new Date(data.created * 1000).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    let html = `<div class="plname">Draft ${esc(data.id)} · ${esc(data.label)}</div>
+      <p class="meta">Made ${esc(created)} · ${pool.filters && pool.filters.length ? esc(pool.filters.join(" · ")) : "all loaded tracks"}${pool.done_left_out ? ` · ${fmt(pool.done_left_out)} already-organized tracks left out` : ""}. Nothing here has been written to Spotify.</p>`;
+    html += `<div class="grid kpis">
+      ${kpi("🗂️", "Groups", fmt(t.groups))}
+      ${kpi("🎵", "Tracks grouped", fmt(t.grouped), `of ${fmt(pool.pool)} in the pool`)}
+      ${kpi("⚠️", "Unmatched", fmt(t.unmatched), "can be assigned by hand")}
+      ${t.left_out ? kpi("➖", "Left out", fmt(t.left_out), "stay in the pool") : ""}
+      ${t.skipped ? kpi("⏭️", "Skipped", fmt(t.skipped), "marked done") : ""}
+    </div>`;
+    html += progressBar(data.progress);
+    html += `<h2>Groups</h2><p class="hint">Ranked by size. Ask Claude to rename, merge, drop or move tracks between groups.${data.trimmed ? " Some details are trimmed here; the page saved on your computer has everything." : ""}</p>
+      <div class="groups">${data.groups.map((g, i) => groupCard(g, i, t.grouped)).join("")}</div>`;
+    html += unmatchedSection("⚠️ Unmatched tracks", "Missing the data a group needs. Assign them to a group, or skip them.", data.unmatched);
+    html += unmatchedSection("➖ Left out", "Not in any group; they stay in the pool for the next grouping.", data.left_out);
+    if (data.drafts && data.drafts.length) {
+      html += `<div class="note" style="margin-top:20px">Other drafts: ${data.drafts.map((x) => `${esc(x.id)} (${esc(x.label)}, ${x.groups} groups)`).join(" · ")}</div>`;
+    }
+    html += `<div class="foot-note">Data from Spotify. Names link to Spotify. A draft is only a plan: nothing changes on Spotify until you approve it.</div>`;
+    app.innerHTML = html;
+    reportSize();
+  }
+
+  if (standalone) {
+    let embedded = null;
+    try { embedded = JSON.parse(document.getElementById("tailorlist-data").textContent); } catch (e) {}
+    if (embedded) render(embedded);
+    return;
+  }
+
+  new ResizeObserver(reportSize).observe(document.body);
+
+  request("ui/initialize", {
+    protocolVersion: "2025-06-18",
+    appInfo: { name: "tailorlist-draft", version: "0.1.0" },
+    appCapabilities: {},
+  }).then(() => notify("ui/notifications/initialized"))
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>
