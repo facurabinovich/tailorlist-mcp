@@ -4,21 +4,26 @@ Goal: replicate all, or nearly all, of the original Tailorlist app (`PROYECTOS/s
 as MCP tools. Built from a survey of its 9 pages, the 15 `core/` modules, the feature inventory in
 its `SPEC.md` and the tools planned for the archived agent (`agent-archive` tag).
 
-Status: ✅ done · ⏳ later phase. Approved by Facu 2026-11-09 (order and the Phase 2 split).
+Status: ✅ done · ⏳ later phase. Approved by Facu 2026-11-09 (lean version: few fixed
+dashboards, data tools for everything else).
 
-## How the original maps to an MCP
+## Approach
 
-- **Pages become views.** Every analysis page becomes a dashboard tool. The dashboard opens as a
-  page in the browser and as an MCP App (Claude Desktop shows it in the chat once the
-  local-server bug is fixed). Claude gets a short text summary, not the whole page.
-- **Chart clicks become a query tool.** The original listed tracks when you clicked a bar
-  (artist, decade, popularity bin, genre, month). Here Claude calls `find_tracks` with the same
-  filter.
-- **The playlist-building flow becomes draft tools.** My Clusters + Cluster Results (filters, 3
-  grouping modes, cards, manual assignment, rename, export) become: group into a draft, show
-  it, edit it, write it to Spotify.
-- **Home and Enrich go away as pages.** Adding playlists by URL is `list_my_playlists` +
-  `load_playlists`; enrichment is a tool with progress.
+- **Few fixed dashboards.** Only for views that repeat and carry a lot: the overview, a
+  playlist, and the draft of new playlists. They open as a browser page and as an MCP App
+  (Claude Desktop shows it in the chat once the local-server bug is fixed). Claude gets a short
+  text summary, not the page.
+- **Data tools for everything else.** Claude answers and draws its own charts (artifacts in
+  Claude Desktop) from small, already-aggregated tables: `collection_stats` for any count or
+  average by any dimension, `find_tracks` for listings. That covers the artist and album pages,
+  the comparison charts and every chart drill-down of the original, plus questions no fixed
+  page answered.
+- **Claude never gets the raw collection.** Tools return aggregates or capped listings, so a
+  5,000-track library doesn't flood the conversation.
+- **Metric definitions** (listening age, popularity, genre families, duplicates vs. versions)
+  live in the server instructions, so Claude explains them the way the original's Glossary
+  did. No glossary tool.
+- If a section of the original is missed, it can come back as a fixed dashboard later.
 
 ## The tools
 
@@ -30,58 +35,93 @@ Status: ✅ done · ⏳ later phase. Approved by Facu 2026-11-09 (order and the 
 | `list_my_playlists` | Home: add playlists by URL | ✅ |
 | `load_playlists(playlists, force)` | Home: review + load; opens the overview | ✅ |
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
-| `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s | 2 |
-| `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress and ETA, retry of failed tracks, cancel; coverage stats (Audio DNA's enrichment stats) | 4 |
+| `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | 2a |
+| `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
 
-### Views (dashboards)
+### Dashboards (fixed views)
 
-| Tool | Original page | Sections | Phase |
-|---|---|---|---|
-| `show_overview` | Overview | KPIs, oldest/newest, listening age, tracks per playlist, top artists, decades, popularity, most popular artists, favourite albums, genres, additions over time, duplicates | ✅ (audio averages ⏳4) |
-| `show_playlist(playlist)` | Playlist Detail | header KPIs, track highlights, averages, top artists, exact duplicates, different versions, era (decade/year, with tracks per decade), top genres, growth over time (peak month, single-session date), all tracks; Audio DNA, mood map and similar playlists (audio-based) ⏳4 | 2 |
-| `show_artist(artist)` | Artist / Album (artist mode) | header card, genre pills, tracks, albums in your collection (jump to an album), extremes, playlist distribution, popularity, release timeline; audio fingerprint ⏳4 | 2 |
-| `show_album(album, artist)` | Artist / Album (album mode) | same as artist, for one album, with its release year and age | 2 |
-| `compare_playlists(playlists?)` | Playlist Comparison | size, followers*, exact duplicates, different versions, duration (with longest/shortest track), popularity, genre diversity, release era, decade mix (tracks per playlist and decade), playlist age (and playlists without dates); audio feature leaders and heatmap ⏳4 | 2 |
-| `show_audio_dna(playlists?)` | Audio DNA | mood map, global fingerprint, feature distributions, playlist radar, correlations, extreme tracks | 4 |
-
-\* Followers: check that Development Mode still returns them.
-
-### Queries (Claude reads these, no dashboard)
-
-| Tool | Replaces | Phase |
+| Tool | Original page | Phase |
 |---|---|---|
-| `get_playlist_tracks(playlist)` | Playlist Detail "All Tracks" | ✅ |
-| `find_tracks(filters, sort, limit)` | every chart drill-down (artist, decade, year, popularity bin, genre, month added) + the archived agent's `find_tracks`/`top_tracks`. Filters: playlists, artist, album, genre or family, decade/year range, popularity range, added between, audio features and mood ⏳4 | 2 |
-| `find_duplicates(playlists?, kind)` | full lists of exact duplicates and different versions (Playlist Detail, Comparison) | 2 |
-| `genre_families(playlists?)` | genre-family breakdown (My Clusters pre-filter counts, archived `genre_families`) | 2 |
-| `glossary(term?)` | Glossary page (search) | 2 |
+| `show_overview` | Overview: KPIs, oldest/newest, listening age, tracks per playlist, top artists, decades, popularity, most popular artists, favourite albums, genres, additions over time, duplicates | ✅ (audio averages ⏳4) |
+| `show_playlist(playlist)` | Playlist Detail, see the 2a check below | 2a |
+| `show_draft(draft)` | Cluster Results: one card per group, unmatched tracks | 2b |
+
+### Data tools (Claude answers and charts)
+
+| Tool | What | Phase |
+|---|---|---|
+| `get_playlist_tracks(playlist)` | every track of a playlist, in order (Playlist Detail "All Tracks") | ✅ |
+| `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | 2a |
+| `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | 2a |
+| `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | 2a |
+| `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | 2a |
 
 ### Building playlists (My Clusters + Cluster Results)
 
 | Tool | Replaces | Phase |
 |---|---|---|
-| `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | 2 (KMeans 4) |
-| `show_draft(draft)` | Cluster Results: one card per group, unmatched tracks | 2 |
-| `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | 2 |
-| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done" (saved in the cache), leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | 2 (marking done on write: 3) |
+| `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | 2b (KMeans 4) |
+| `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | 2b |
+| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | 2b (marking done on write: 3) |
 | `create_playlist(name, tracks or draft group, description)` | export to Spotify (the app used Spotlistr); always previews and asks first | 3 |
 | `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | 3 |
 | `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | 3 |
 
+### Audio (Phase 4)
+
+Audio DNA, mood map, radar, feature distributions, correlations, extreme tracks, KMeans and
+the audio sections of the overview, playlist and comparison. Decided in Phase 4 with real
+data: most of it should be `collection_stats` and `find_tracks` with audio metrics (Claude
+charts), plus audio sections in `show_playlist`.
+
 ### From the backlog ([TODO.md](TODO.md))
 
-| Tool | What | Phase |
+| Tool | What |
+|---|---|
+| `find_superseded_versions` | popularity-0 album versions and their current version, offer to swap |
+| `original_years` | original release year (MusicBrainz by ISRC), compilations flagged, stats on original years |
+| `sequence_tracks(curve)` | order a playlist by an energy/tempo curve (planned for the archived agent) |
+
+## Phase 2a check: every non-audio section of the original, and what covers it
+
+| Original | Section | Covered by |
 |---|---|---|
-| `find_superseded_versions` | popularity-0 album versions and their current version, offer to swap | backlog |
-| `original_years` | original release year (MusicBrainz by ISRC), compilations flagged, stats on original years | backlog |
-| `sequence_tracks(curve)` | order a playlist by an energy/tempo curve (planned for the archived agent) | backlog |
+| Overview | chart drill-downs (artist, decade, popularity bin, genre, month) | `find_tracks` |
+| Overview | "Show top 20" for popular artists and albums | `collection_stats(group_by="artist"/"album")` |
+| Playlist Detail | playlist picker, header KPIs (tracks, followers, duration, popularity) | `show_playlist` |
+| Playlist Detail | track highlights (most/least popular, oldest/newest, longest/shortest) | `show_playlist` |
+| Playlist Detail | averages, top artists, top genres | `show_playlist` |
+| Playlist Detail | exact duplicates, different versions | `show_playlist` (full lists: `find_duplicates`) |
+| Playlist Detail | era by decade and by year, tracks of a decade | `show_playlist`, `find_tracks` |
+| Playlist Detail | growth over time, peak month, built in one session | `show_playlist` |
+| Playlist Detail | all tracks | `show_playlist`, `get_playlist_tracks` |
+| Artist / Album | artist or album picker (ranked badges) | `collection_stats(group_by="artist"/"album")` |
+| Artist / Album | header card, genre pills, KPIs | `collection_stats` + `find_tracks(artist=…)` |
+| Artist / Album | tracks, albums in your collection, jump to album | `find_tracks(artist=…/album=…)`, `collection_stats(group_by="album", filters={artist})` |
+| Artist / Album | extremes (most/least popular, oldest/newest) | `find_tracks(artist=…, sort=…)` |
+| Artist / Album | playlist distribution | `collection_stats(group_by="playlist", filters={artist})` |
+| Artist / Album | popularity distribution, release timeline / year | `collection_stats(group_by="popularity_bin"/"year", filters={artist})` |
+| Artist / Album | album release year and age | `find_tracks(album=…)` (release date) |
+| Comparison | size, followers | `compare_playlists` |
+| Comparison | exact duplicates, different versions | `find_duplicates(playlists)` |
+| Comparison | duration (and extremes), popularity | `compare_playlists` |
+| Comparison | genre diversity, release era, playlist age, playlists without dates | `compare_playlists` |
+| Comparison | decade distribution, tracks of a playlist and decade | `collection_stats(group_by="decade", split_by="playlist")`, `find_tracks` |
+| Comparison | "unique" tracks per playlist | `compare_playlists` |
+| Home | duplicate note, unavailable tracks note | `load_playlists` results, `show_overview` |
+| Glossary | metric definitions | server instructions |
+
+Checked against Spotify on 2026-11-09: playlist `followers.total` is returned in Development
+Mode (Alt7: 5, JC: 19).
 
 ## Not replicated
 
 - **Home and session handling**: URL params (`?playlists=`, `?sid=`), session cookies, the
   7-day MySQL session. The local cache does this job.
-- **Enrich page UI** (progress screen, rotating tips): progress goes through the MCP progress
+- **Enrich page UI** (progress screen, rotating tips): progress goes through MCP progress
   notifications.
+- **Fixed pages for Artist / Album and Comparison, and the Glossary page**: data tools and
+  Claude's own charts instead (see Approach).
 - **Contact page, analytics, sidebar navigation, global CSS, dev collection**: app plumbing.
 - **Demo Collection**: already removed in the original.
 - **Kaggle fallback DB**: dropped (licence).
@@ -92,11 +132,10 @@ Status: ✅ done · ⏳ later phase. Approved by Facu 2026-11-09 (order and the 
 
 1. ✅ Skeleton, overview, `get_playlist_tracks`.
 2. Analysis without audio, in two parts:
-   - **2a.** `fill_genres`, `show_playlist`, `show_artist`, `show_album`, `compare_playlists`,
-     `find_tracks`, `find_duplicates`, `genre_families`, `glossary`.
+   - **2a.** `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`,
+     `compare_playlists`, `show_playlist`, metric definitions in the instructions.
    - **2b.** `group_tracks` (category and genre modes), `show_draft`, `edit_draft`,
      `organize_progress` / `reset_progress`.
 3. Write: `create_playlist`, `add_tracks`, `remove_tracks`, `export_tracks`.
-4. Audio: `fetch_audio_features`, `show_audio_dna`, KMeans mode, audio sections of every view,
-   audio filters in `find_tracks`.
+4. Audio: `fetch_audio_features`, KMeans mode, audio metrics in the data tools and dashboards.
 5. Launch.
