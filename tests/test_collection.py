@@ -77,20 +77,12 @@ def test_playlist_id_from_accepts_ids_uris_and_links():
     assert collection.playlist_id_from("Alpha") is None
 
 
-def test_load_then_summary(conn):
+def test_load_reports_counts(conn):
     client = FakeClient()
     out = collection.load_playlists(client, conn, [PL_A, f"https://open.spotify.com/playlist/{PL_B}"])
     assert [r["status"] for r in out["results"]] == ["loaded", "loaded"]
     assert out["results"][0]["tracks"] == 2 and out["results"][0]["skipped"] == 2
     assert out["collection"] == {"playlists": 2, "entries": 5, "unique_tracks": 3, "artists": 3}
-
-    s = collection.summary(conn)
-    assert s["tracks_in_several_playlists"] == 1      # t2
-    assert s["tracks_repeated_inside_a_playlist"] == 1  # t3 twice in Beta
-    assert s["top_artists"][0] == {"name": "AR1", "tracks": 2}
-    assert s["top_spotify_genres"][0] == {"genre": "rock", "tracks": 2}
-    assert s["genre_coverage"] == {"tracks_without_genres": 1, "artists_without_genres": 1}
-    assert s["decades"] == {"1980s": 1, "1990s": 1, "2000s": 1}
 
 
 def test_unchanged_playlists_are_skipped_and_changed_ones_reloaded(conn):
@@ -125,10 +117,6 @@ def test_list_playlists_marks_ownership_and_cache_state(conn):
     assert out["user"] == "Facu"
     assert (a["mine"], a["tracks"], a["cache"]) == (True, 4, "changed")
     assert (b["mine"], b["tracks"], b["cache"], b["owner"]) == (False, 3, None, "Ana")
-
-
-def test_summary_when_empty(conn):
-    assert "Nothing loaded yet" in collection.summary(conn)["note"]
 
 
 def test_forget_deletes_the_file(tmp_path):

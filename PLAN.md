@@ -90,6 +90,8 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
   - Policy VI.2 / Terms VII.1.3: the name can't start with "Spot" or include "Spotify".
   - Terms III.1.1 / Policy IV.2: private personal use, no commercial use.
 
+Backlog of unscheduled ideas: [TODO.md](TODO.md).
+
 ## Open questions
 
 - Spotify's answer on the AI clause (new thread in the Spotify for Developers forum, where

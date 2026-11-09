@@ -6,33 +6,43 @@ from __future__ import annotations
 import sys
 import webbrowser
 from contextlib import closing
+from pathlib import Path
 
 import anyio
 import anyio.from_thread
 import anyio.to_thread
+from mcp.server.apps import Apps
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, collection, settings, store
+from tailorlist_mcp import __version__, browser, collection, dashboard, settings, store
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
 INSTRUCTIONS = """\
 Tailorlist reads, analyzes and reorganizes the user's own Spotify playlists.
 
-Workflow: list_my_playlists -> ask the user which playlists to load -> load_playlists
-(copies them into a local cache) -> collection_summary. If a tool says the user isn't
-connected, call connect_spotify and give the user the link it returns.
+Workflow: list_my_playlists -> ask the user which playlists to load -> load_playlists.
+load_playlists opens the overview dashboard by itself (in the user's browser, and inside the
+chat where the app supports it); show_overview opens it again later. If a tool says the user isn't connected, call connect_spotify and give the user
+the link it returns.
 
 Never pick playlists to load on your own, and never load all of them unless the user says
 so: show the list and ask which ones. Playlists already in the cache ("current") don't need
 loading again.
 
+After the dashboard opens, don't repeat its numbers as a long text: add a short comment
+and suggest what to look at next.
+
+For anything about the user's playlists (what's in one, counts, artists...), use these tools:
+the cache has every track. Don't browse Spotify's website or look for the cache file.
+
 Data comes from Spotify. When you mention playlists or tracks, include their Spotify links
 where the tool gave you one.
 """
 
-mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__)
+OVERVIEW_URI = "ui://tailorlist/overview.html"
 
 
 def _client() -> SpotifyClient:
@@ -52,6 +62,91 @@ def _spotify_call(fn):
         raise ToolError(str(exc)) from exc
     except spotify_auth.NotLoggedIn as exc:
         raise ToolError(f"{exc} Call connect_spotify to log in.") from exc
+
+
+def _dashboard_result(data: dict, intro: str = "") -> CallToolResult:
+    """Full data for the dashboard (structured), a short summary for Claude (text).
+
+    The dashboard is also written as a local page and opened in the browser, because some
+    hosts don't render MCP Apps (and the server can't tell whether this one did).
+    """
+    parts = [intro] if intro else []
+    if not data.get("empty"):
+        page = browser.write_page(data)
+        opened = browser.open_in_browser(page)
+        parts.append(
+            ("Opened the overview dashboard in the user's browser" if opened
+             else "Saved the overview dashboard as a web page")
+            + f" ({page}). Claude Desktop may also show it inside the chat, but it can't be"
+            " confirmed from here: don't claim it is on screen; mention the browser page."
+        )
+    parts.append(dashboard.model_summary(data))
+    return CallToolResult(
+        content=[TextContent(type="text", text="\n".join(parts))],
+        structured_content=data,
+    )
+
+
+# ---------------------------------------------------------------- dashboard tools (MCP Apps)
+
+apps = Apps()
+apps.add_html_resource(
+    OVERVIEW_URI,
+    (Path(__file__).parent / "ui" / "overview.html").read_text(encoding="utf-8"),
+    name="Tailorlist overview",
+)
+
+
+@apps.tool(resource_uri=OVERVIEW_URI)
+async def load_playlists(playlists: list[str], ctx: Context, force: bool = False) -> CallToolResult:
+    """Copy playlists from Spotify into the local cache and show the overview dashboard.
+
+    Only load the playlists the user chose. If they haven't said which ones, ask them first
+    (list_my_playlists shows the options); don't load all of them unless they ask for that.
+
+    Args:
+        playlists: playlist IDs or Spotify playlist links of the playlists the user chose.
+        force: re-read playlists even if they haven't changed since the last load.
+
+    Playlists that haven't changed are skipped. The dashboard covers everything in the cache.
+    """
+    client = _client()
+
+    def progress(done: int, total: int, name: str) -> None:
+        try:
+            anyio.from_thread.run(ctx.report_progress, done, total, name)
+        except Exception:
+            pass
+
+    def work() -> CallToolResult:
+        with closing(store.connect()) as conn:
+            loaded = collection.load_playlists(client, conn, playlists, force=force, progress=progress)
+            data = dashboard.overview_data(conn)
+        data["load"] = loaded["results"]
+        lines = []
+        for r in loaded["results"]:
+            if r.get("status") == "loaded":
+                lines.append(f"- {r['name']}: loaded, {r['tracks']} tracks" + (f", {r['skipped']} skipped (episodes/local files)" if r["skipped"] else ""))
+            elif r.get("status") == "unchanged":
+                lines.append(f"- {r['name']}: unchanged since last load")
+            else:
+                lines.append(f"- {r.get('name') or r.get('id') or r.get('ref')}: {r.get('status')} - {r.get('error')}")
+        return _dashboard_result(data, "Load results:\n" + "\n".join(lines))
+
+    return await anyio.to_thread.run_sync(lambda: _spotify_call(work))
+
+
+@apps.tool(resource_uri=OVERVIEW_URI)
+def show_overview() -> CallToolResult:
+    """Show the overview dashboard of the loaded playlists again: KPIs, oldest/newest track,
+    playlists, top artists, decades, popularity, albums, genres, additions over time and
+    duplicates. load_playlists already shows it after loading.
+    """
+    with closing(store.connect()) as conn:
+        return _dashboard_result(dashboard.overview_data(conn))
+
+
+mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__, extensions=[apps])
 
 
 @mcp.tool()
@@ -99,41 +194,20 @@ def list_my_playlists() -> dict:
 
 
 @mcp.tool()
-async def load_playlists(playlists: list[str], ctx: Context, force: bool = False) -> dict:
-    """Copy playlists from Spotify into the local cache so they can be analyzed.
-
-    Only load the playlists the user chose. If they haven't said which ones, ask them first
-    (list_my_playlists shows the options); don't load all of them unless they ask for that.
+def get_playlist_tracks(playlist: str, include_links: bool = False) -> str:
+    """Every track of a loaded playlist, in playlist order: track, artist (with featured
+    artists), album, year, duration, popularity and date added. Reads the local cache, so it
+    always has the full playlist.
 
     Args:
-        playlists: playlist IDs or Spotify playlist links of the playlists the user chose.
-        force: re-read playlists even if they haven't changed since the last load.
-
-    Returns per-playlist results and the collection size. Playlists that haven't changed are
-    skipped. Large playlists take a few seconds each.
-    """
-    client = _client()
-
-    def progress(done: int, total: int, name: str) -> None:
-        try:
-            anyio.from_thread.run(ctx.report_progress, done, total, name)
-        except Exception:
-            pass
-
-    def work() -> dict:
-        with closing(store.connect()) as conn:
-            return collection.load_playlists(client, conn, playlists, force=force, progress=progress)
-
-    return await anyio.to_thread.run_sync(lambda: _spotify_call(work))
-
-
-@mcp.tool()
-def collection_summary() -> dict:
-    """Overview of everything loaded: playlists with sizes and hours, tracks shared between
-    playlists or repeated inside one, top artists, Spotify genres and decades.
+        playlist: the playlist's name (or a unique part of it), ID or Spotify link.
+        include_links: add each track's Spotify link (longer output).
     """
     with closing(store.connect()) as conn:
-        return collection.summary(conn)
+        try:
+            return dashboard.playlist_track_table(conn, playlist, include_links)
+        except dashboard.PlaylistNotFound as exc:
+            raise ToolError(str(exc)) from exc
 
 
 @mcp.tool()

@@ -35,8 +35,11 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
 5. Add it to Claude Code: `claude mcp add -s user tailorlist -- /path/to/.venv/bin/tailorlist-mcp`.
    For Claude Desktop, add it under `mcpServers` in `claude_desktop_config.json`.
 
-Tools so far: `connect_spotify`, `list_my_playlists`, `load_playlists`, `collection_summary`,
-`forget_my_data`. Everything is stored in `~/.tailorlist-mcp` (`TAILORLIST_HOME` to change it).
+Tools so far: `connect_spotify`, `list_my_playlists`, `load_playlists` (shows the overview
+dashboard after loading), `show_overview`, `get_playlist_tracks`, `forget_my_data`. The
+dashboard opens in your browser (`~/.tailorlist-mcp/overview.html`; set
+`TAILORLIST_OPEN_BROWSER=0` to turn that off) and is also an MCP App, which Claude Desktop can
+show inside the chat. Everything is stored in `~/.tailorlist-mcp` (`TAILORLIST_HOME` to change it).
 
 ## Spotify's terms
 
