@@ -1,6 +1,7 @@
 """Characterization of core.duplicates on small fixed frames (values verified against the
 pre-T20 inline logic of pages/2_Playlist_Detail.py)."""
 import pandas as pd
+import pytest
 
 from tailorlist_mcp.analysis import duplicates as dup
 
@@ -78,8 +79,9 @@ def test_exact_duplicates_empty_frame():
 def test_different_versions():
     raw = dup.drop_missing_ids(dup.raw_records_frame(_records(), "P1"))
     v = dup.different_versions(raw)
-    assert v.columns.tolist() == ["track_name", "artist_name", "n_unique_ids", "total"]
-    assert v.to_dict("records") == [{"track_name": "Song", "artist_name": "X", "n_unique_ids": 2, "total": 3}]
+    assert v.columns.tolist() == ["track_name", "artist_name", "n_unique_ids", "total", "names", "track_ids"]
+    assert v.to_dict("records") == [{"track_name": "Song", "artist_name": "X", "n_unique_ids": 2, "total": 3,
+                                     "names": ["Song"], "track_ids": ["a", "b"]}]
 
 
 def test_different_versions_ignores_pure_exact_duplicates():
@@ -105,6 +107,44 @@ def test_different_versions_same_name_other_artist_is_not_a_version():
 def test_different_versions_empty_frame():
     raw = dup.drop_missing_ids(dup.raw_records_frame([]))
     assert dup.different_versions(raw).empty
+
+
+@pytest.mark.parametrize("name, base", [
+    ("Come Together - Remastered 2009", "Come Together"),
+    ("Something - 2019 Mix", "Something"),
+    ("Love Me Do - Mono Version", "Love Me Do"),
+    ("Heart of Gold - Live", "Heart of Gold"),
+    ("Layla - Acoustic; Live at MTV Unplugged, 1992; 2013 Remaster", "Layla"),
+    ("Persiana Americana - En Vivo", "Persiana Americana"),
+    ("Hey Jude (Remastered 2015)", "Hey Jude"),
+    ("Help! - Mono / Remastered", "Help!"),
+    ("Song - Demo - Remastered", "Song"),
+    ("Mi Enfermedad - Remasterizado 2019", "Mi Enfermedad"),
+    ("Walk of Life - Radio Edit", "Walk of Life"),
+    ("Song - Deepend Remix", "Song - Deepend Remix"),
+    ("Song - From \"Grease\"", "Song - From \"Grease\""),
+    ("Song (feat. Someone)", "Song (feat. Someone)"),
+    ("Live and Let Die", "Live and Let Die"),
+    ("Live", "Live"),
+    ("Anti-Hero", "Anti-Hero"),
+])
+def test_strip_version_suffix(name, base):
+    assert dup.strip_version_suffix(name) == base
+
+
+def test_different_versions_ignores_version_suffixes():
+    raw = pd.DataFrame({
+        "track_id": ["1", "2", "3", "4", "5"],
+        "track_name": ["Come Together - Remastered 2009", "Come Together", "come together - Live",
+                       "Come Together - Deepend Remix", "Something"],
+        "artist_name": ["The Beatles"] * 5,
+    })
+    v = dup.different_versions(raw)
+    assert len(v) == 1
+    row = v.iloc[0]
+    assert row["track_name"] == "Come Together" and row["n_unique_ids"] == 3
+    assert row["names"] == ["Come Together - Remastered 2009", "Come Together", "come together - Live"]
+    assert row["track_ids"] == ["1", "2", "3"]
 
 
 def test_inputs_not_mutated():

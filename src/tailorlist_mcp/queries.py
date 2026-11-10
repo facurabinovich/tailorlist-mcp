@@ -377,15 +377,11 @@ def find_duplicates(
                           [[r.track_name, r.artist_display, r.count, r.playlists, r.track_id] for r in exact.itertuples()]))
     if kind in ("all", "versions"):
         versions = comparison.different_versions_across_playlists(recs)
-        ids: dict[tuple, list[str]] = {}
-        for r in recs:
-            found = ids.setdefault((r["name"], r["artists"]), [])
-            if r["id"] not in found:
-                found.append(r["id"])
-        out.append(f"\nDifferent versions: {len(versions)} songs saved under several Spotify IDs (same name and primary artist)"
+        out.append(f"\nDifferent versions: {len(versions)} songs saved under several Spotify IDs (same song and primary "
+                   "artist, ignoring suffixes such as \"- Remastered\", \"- Live\" or \"- Acoustic\")"
                    + (f" (showing {limit})." if len(versions) > limit else "."))
-        out.append(_table(["Track", "Artist", "Versions", "Playlists", "Track IDs"],
-                          [[r.track_name, r.artist_name, r.n_unique_ids, r.playlists, ",".join(ids.get((r.track_name, r.artist_name), []))]
+        out.append(_table(["Track", "Artist", "Versions", "Saved as", "Playlists", "Track IDs"],
+                          [[r.track_name, r.artist_name, r.n_unique_ids, "; ".join(r.names), r.playlists, ",".join(r.track_ids)]
                            for r in versions.head(limit).itertuples()]))
     return "\n".join(out)
 

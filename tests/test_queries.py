@@ -146,7 +146,7 @@ def test_find_duplicates(conn):
     out = queries.find_duplicates(conn)
     assert "Exact duplicates: 2 Spotify tracks" in out and "Different versions: 1 songs" in out
     assert "Beta Song | A1 | 2 | One · Two | t2" in out
-    assert "Alpha Song | A1 | 2 | One · Two (×2) | t1,t5" in out
+    assert "Alpha Song | A1 | 2 | Alpha Song | One · Two (×2) | t1,t5" in out
     only_two = queries.find_duplicates(conn, ["Two"], kind="exact")
     assert "t5" in only_two and "t2" not in only_two and "Different versions" not in only_two
     with pytest.raises(queries.QueryError):

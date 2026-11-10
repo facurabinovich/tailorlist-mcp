@@ -251,7 +251,7 @@ def model_summary(data: dict) -> str:
     lines.append(
         f"Duplicates: {d['tracks_in_several_playlists']} tracks are in more than one playlist; "
         f"{d['exact']['count']} Spotify IDs saved more than once; {d['versions']['count']} songs saved "
-        "as different versions (same name and artist, different IDs)."
+        "as different versions (same song and artist, different IDs)."
     )
     lines.append("Don't repeat these numbers as a long text: they are in the dashboard. "
                  "Add a short comment and suggest next steps.")

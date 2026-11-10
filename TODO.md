@@ -27,9 +27,3 @@ Tool idea: find the original year of each recording (MusicBrainz recording
 - use the original year in the overview stats (show both when they differ),
 - list the tracks whose album year is far from the original ("saved from a compilation"),
 - optionally offer to swap them for the version on the original album (Phase 3).
-
-### Different versions: ignore "Remastered" suffixes
-
-Duplicate detection follows the original app: same name and artist under different IDs. So
-"Come Together" and "Come Together - Remastered 2009" don't match. Normalizing suffixes like
-"- Remastered 2009", "- Mono Version", "- 2022 Stereo Mix" would catch more versions.

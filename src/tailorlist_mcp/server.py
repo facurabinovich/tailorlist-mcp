@@ -100,9 +100,10 @@ Definitions (use them when the user asks what a number means):
   "Other" often holds adult standards, chanson, christmas, comedy, doo-wop, drone, easy
   listening, gospel, new age, schlager, soundtrack and very niche tags.
 - Exact duplicate: the same Spotify ID saved more than once (inside one playlist or across
-  playlists). Different versions: the same song name and primary artist under different IDs
-  (album vs. compilation, remaster, live...). Remaster suffixes aren't normalized, so
-  "Song" and "Song - Remastered 2009" are not matched.
+  playlists). Different versions: the same song and primary artist under different IDs
+  (album vs. compilation, remaster, live...). Version suffixes are ignored when comparing
+  names, so "Song", "Song - Remastered 2009", "Song - Live" and "Song (Acoustic Version)"
+  match; remixes count as different songs.
 - Genre diversity: distinct genre tags among a playlist's artists. Playlist age: when its
   first track was added.
 """
@@ -546,7 +547,8 @@ def find_tracks(
 def find_duplicates(playlists: list[str] | None = None, kind: str = "all", limit: int = queries.DEFAULT_LIMIT) -> str:
     """Duplicates among the loaded playlists (or only the ones given): exact duplicates (the same
     Spotify ID saved more than once, inside or across playlists) and different versions (same song
-    name and primary artist under different IDs), each with the playlists it is in and the IDs.
+    and primary artist under different IDs, ignoring suffixes such as "- Remastered 2009" or
+    "- Live"), each with the playlists it is in and the IDs.
 
     Args:
         playlists: names, IDs or links; default all loaded playlists.

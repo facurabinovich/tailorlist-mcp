@@ -1,4 +1,5 @@
 """Characterization tests for core/comparison.py on small fixed frames."""
+from unittest.mock import ANY
 import pandas as pd
 import pytest
 
@@ -67,7 +68,8 @@ def test_exact_duplicates_sorted_by_track_name():
 def test_different_versions_across_playlists():
     v = cmp.different_versions_across_playlists(_records())
     assert v.to_dict("records") == [
-        {"track_name": "Beta", "artist_name": "Y", "n_unique_ids": 2, "total": 2, "playlists": "P1 · P2"}
+        {"track_name": "Beta", "artist_name": "Y", "n_unique_ids": 2, "total": 2, "names": ["Beta"],
+         "track_ids": ANY, "playlists": "P1 · P2"}
     ]
 
 
