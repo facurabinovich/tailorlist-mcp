@@ -225,12 +225,16 @@ def _choices(meta: dict[str, dict], ids: list[str], versions: str | None, keep_s
             "left_out": left_out, "swapped": swapped}
 
 
+def _n(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
 def _question(group: str, c: dict) -> str:
     out = [f'Group "{group}" needs a decision before it can be written.']
     if c["ask_replaced"]:
         same = [m for m in c["ask_replaced"] if m["album"] and m["album"] == m["current_album"]]
         other = [m for m in c["ask_replaced"] if m not in same]
-        out.append(f"{len(c['ask_replaced'])} tracks are album versions Spotify replaced with a newer release (it plays the current "
+        out.append(f"{_n(len(c['ask_replaced']), 'track is an album version', 'tracks are album versions')} Spotify replaced with a newer release (it plays the current "
                    "version instead; the saved one has popularity 0).")
         if same:
             out.append(f"Same album ({len(same)}): only the release was refreshed.\n"
@@ -357,7 +361,7 @@ def _preview_create(conn: sqlite3.Connection, client: SpotifyClient, entries: li
         lines.append(head + f"\n   Description: {desc}")
         extras = []
         if c["swapped"]:
-            extras.append(f"{len(c['swapped'])} replaced versions written as the current version")
+            extras.append(f"{_n(len(c['swapped']), 'replaced version', 'replaced versions')} written as the current version")
         if versions == "saved" and any(meta[t]["current_id"] for t in e["ids"]):
             extras.append("replaced versions kept as saved")
         if c["left_out"]:
@@ -370,7 +374,8 @@ def _preview_create(conn: sqlite3.Connection, client: SpotifyClient, entries: li
         first: dict[str, str] = {}
         for d_id, w_id in pairs:
             first.setdefault(w_id, d_id)
-        shown = [[i, meta[d_id]["name"] + (" (current version)" if w_id != d_id else ""), meta[d_id]["artist"], meta[d_id]["album"] or ""]
+        shown = [[i, meta[d_id]["name"] + (" (current version)" if w_id != d_id else ""), meta[d_id]["artist"],
+                  (meta[d_id]["current_album"] if w_id != d_id else meta[d_id]["album"]) or ""]
                  for i, (w_id, d_id) in enumerate(list(first.items())[:SHOWN], 1)]
         lines.append(_table(["#", "Track", "Artist", "Album"], shown) + (f"\n   ... and {len(write_ids) - SHOWN} more" if len(write_ids) > SHOWN else ""))
     head = [f"Preview: create {len(items)} playlist{'s' if len(items) != 1 else ''}.",

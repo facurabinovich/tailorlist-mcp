@@ -75,8 +75,10 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
    0.5-3 s, a confirmation 2-4 s (120 tracks = 2 calls). Two findings: Spotify ignores `public: false`
    when creating (see "Phase 3 checks"), and `GET playlists/{id}` returns a stale `snapshot_id` for
    several seconds after a write, so "changed since the preview" is judged by the playlist's content
-   (hash of its ordered track IDs), not by the snapshot. The real two-group `write_draft` was NOT
-   confirmed because the playlists would have come out public.
+   (hash of its ordered track IDs), not by the snapshot. After Facu accepted public playlists, the
+   real two-group `write_draft` ran (draft d1 from 🇪🇸7, 3 replaced versions written as current, one
+   duplicate dropped first): "En español · 2000s" (13 tracks) and "En español · 2010s" (9) created in
+   2.5 s, order checked against Spotify, 22 tracks marked done.
 4. **Audio features.** ReccoBeats, Audio DNA.
 5. **Launch.** README with the Spotify app walkthrough, `uvx` install, Claude Desktop
    extension if feasible, 2-minute demo video, post. README states the Spotify AI-clause

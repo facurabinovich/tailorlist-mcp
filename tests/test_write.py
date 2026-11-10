@@ -326,7 +326,7 @@ def test_choosing_current_versions_writes_the_current_ids_and_marks_the_draft_on
     load(sp, conn)
     d = make_draft(conn, {"G": [tid(1), tid(2), tid(3), tid(4)]})
     text = write.write_draft(conn, sp, d["id"], versions="current", keep_saved=[tid(3)], unavailable="leave_out", now=1)
-    assert "2 replaced" not in text and "1 replaced versions written as the current version" in text and "left out" in text
+    assert "2 replaced" not in text and "1 replaced version written as the current version" in text and "left out" in text
     write.confirm(sp, conn, code_of(text), now=2)
     assert sp.playlists[pid("N")]["items"] == [tid(1), tid(302), tid(3)]       # current for t2, saved kept for t3, t4 left out
     assert progress.done_ids(conn) == {tid(1), tid(2), tid(3)}               # the left-out track stays in the pool
