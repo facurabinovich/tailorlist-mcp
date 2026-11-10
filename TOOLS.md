@@ -21,8 +21,9 @@ dashboards, data tools for everything else).
 - **Claude never gets the raw collection.** Tools return aggregates or capped listings, so a
   5,000-track library doesn't flood the conversation.
 - **Metric definitions** (listening age, popularity, genre families, duplicates vs. versions)
-  live in the server instructions, so Claude explains them the way the original's Glossary
-  did. No glossary tool.
+  live in `explain(term)` (they were in the server instructions until Claude Code was seen
+  truncating them). The server instructions hold the curator role; the `start` prompt lists
+  what Tailorlist can do.
 - If a section of the original is missed, it can come back as a fixed dashboard later.
 
 ## The tools
@@ -56,6 +57,7 @@ dashboards, data tools for everything else).
 | `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
 | `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
 | `find_replaced_tracks(playlists?)` | tracks with popularity 0: album versions Spotify replaced (with the version it plays now, from relinking) and tracks not playable in the user's country (with alternatives from search). Stats use the current version's popularity. Not in the original app | ✅ |
+| `explain(term)` | (the original's Glossary page) metric definitions, read when the user asks what a number means; moved out of the server instructions, which Claude Code truncated | ✅ |
 | `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | ✅ |
 
 ### Building playlists (My Clusters + Cluster Results)

@@ -78,7 +78,8 @@ def test_reset_progress_needs_confirmation_and_only_clears_progress(home, conn):
 
 
 def test_instructions_state_the_ok_rule():
-    assert "get their OK before anything is written" in server.INSTRUCTIONS
+    assert "the user explicitly approves that exact" in server.INSTRUCTIONS
+    assert "suggest, never decide" in server.INSTRUCTIONS
 
 
 def test_unload_playlists_leaves_spotify_alone_and_prunes_drafts(home, conn):

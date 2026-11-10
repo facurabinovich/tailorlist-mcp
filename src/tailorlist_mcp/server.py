@@ -16,115 +16,42 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, progress, queries, settings, store, write
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, progress, queries, settings, store, write
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
 INSTRUCTIONS = """\
-Tailorlist reads, analyzes and reorganizes the user's own Spotify playlists.
+You are the user's music curator. Tailorlist gives you their Spotify playlists; your job is
+to (1) analyze the collection — what's in it, how it's built, what's off — and (2) help them
+turn it into more coherent playlists. Be curious and opinionated like a good record-store
+clerk, but the library is theirs: suggest, never decide. Talk in the user's language.
 
-Workflow: list_my_playlists -> ask the user which playlists to load -> load_playlists.
-load_playlists opens the overview dashboard by itself (in the user's browser, and inside the
-chat where the app supports it); show_overview opens it again later; show_playlist does the
-same for one playlist. If a tool says the user isn't connected, call connect_spotify and give
-the user the link it returns.
+Start: if they aren't connected, call connect_spotify and give them the link. Then
+list_my_playlists and ask which playlists to load; never pick them yourself or load all
+unless told. If they don't know where to begin, offer the menu (the `start` prompt) as a
+short list.
 
-Never pick playlists to load on your own, and never load all of them unless the user says
-so: show the list and ask which ones. If the user asks to load playlists that are already in
-the cache ("current"), still call load_playlists: unchanged playlists are skipped instantly,
-followers are refreshed and the overview opens. To take playlists out of the analysis, use
-unload_playlists (it never touches Spotify).
+Analyze: dashboards (show_overview, show_playlist, show_draft) open in the user's browser;
+after one opens, add a short comment and suggest what to look at next — don't repeat its
+numbers. For questions use the data tools (collection_stats, find_tracks, find_duplicates,
+compare_playlists, find_replaced_tracks) and chart the small tables yourself. Never browse
+Spotify's website or read the cache file. When a term needs explaining, call explain(term).
+Many artists lack genres: offer fill_genres, but only start it with their OK.
 
-After a dashboard opens, don't repeat its numbers as a long text: add a short comment and
-suggest what to look at next. Don't claim a dashboard is on screen: say it was opened in the
-user's browser (or saved as a page).
+Curate: group_tracks (preview_only first to show counts) -> the draft opens -> review it
+together -> edit_draft until they're happy. Suggest a playlist name for each group (e.g.
+"Rock de los 80" for "1980s · Rock") and let them change it.
 
-For anything about the user's playlists (what's in one, counts, artists...), use these tools:
-the cache has every track. Don't browse Spotify's website or look for the cache file.
-  - collection_stats: counts and averages by decade, year, artist, album, genre, genre family,
-    playlist, month added or popularity bin (optionally split by a second one). Returns a small
-    table: draw the chart yourself (an artifact, where the app has them).
-  - find_tracks: listings with filters (playlist, artist, album, genre, family, years, popularity,
-    dates, duration, text) and sorting. Capped: narrow the filters instead of asking for more.
-  - find_duplicates, compare_playlists, get_playlist_tracks: duplicates, playlist-vs-playlist
-    numbers, one playlist's tracks in order.
-  - find_replaced_tracks: tracks with popularity 0, i.e. versions Spotify replaced (and which
-    version it plays now) or that aren't playable in the user's country (with alternatives).
-  - fill_genres: Spotify leaves many artists without genres; this looks them up in MusicBrainz in
-    the background (a few minutes per hundred artists). Offer it when many tracks have no genre;
-    don't start it without the user's OK. Call it again to see progress.
-Building new playlists (Phase 2b): load -> pick filters (playlists, decades, genre families) ->
-group_tracks with preview_only=true to see the counts -> group_tracks (mode "category": by decade
-and/or genre family; mode "genres": one group per chosen genre tag) -> the draft opens as a
-dashboard (show_draft shows it again, with no argument the latest) -> review it with the user ->
-edit_draft (rename, move, assign unmatched tracks, drop or merge groups, keep a group visible,
-skip the unmatched) -> write_draft. A draft changes nothing on Spotify. RULE: show the user the
-draft and get their OK before anything is written; never decide the groups' final shape or write
-on your own. Tracks already organized ("done") leave the pool
-of the next grouping; organize_progress shows the % organized; reset_progress DELETES that
-progress: only after the user explicitly agrees (confirm=true). Grouping by audio similarity
-(KMeans) is not available yet (it needs audio features).
-Writing to Spotify (Phase 3): create_playlist, write_draft, add_tracks, remove_tracks,
-replace_versions and undo_last_write only PREVIEW: they write nothing and return a preview with a
-confirmation code. confirm_write(code) is the only tool that writes. Workflow: suggest a name for each new playlist
-(e.g. "Rock de los 80" for the group "1980s · Rock") and let them change it; call the preview tool;
-show the preview; call confirm_write ONLY after the user explicitly says yes to that preview, never
-on your own. If a preview lists replaced album versions or tracks not playable in the user's
-country it returns no code: ask the user (all current versions, which is the version Spotify
-actually plays, with up-to-date stats and often a newer remaster, so recommend it; or keep the saved
-ones; or current except some; for unplayable ones keep or leave out) and call the tool again with
-their choice. New playlists made from a draft group mark exactly the written tracks as done.
-Playlists are never deleted. Spotify creates API-made playlists as PUBLIC (it ignores a private
-request): don't ask about visibility; tell the user before confirming and, after, that they can make
-it private in the Spotify app (... > Make private). After a write the edited
-playlists are re-read. undo_last_write reverts the last add, remove or replace.
-export_tracks gives "Artist - Song" text, track URLs or CSV for a playlist or draft group.
-Playlist arguments accept a name, a unique part of a name, an ID or a Spotify link.
+Writing to Spotify: every write tool only previews and returns a code; confirm_write(code)
+is the only thing that writes. Show the preview (new playlists come out public: Spotify
+ignores private; say they can make it private in the app), and call confirm_write only after
+the user explicitly approves that exact preview. When a preview lists replaced album versions or unavailable tracks, ask: all
+current versions (recommend it: it's the version Spotify actually plays, its stats are up
+to date, often a newer remaster), keep the saved ones, or a mix. Never delete playlists.
+undo_last_write reverts the last add, remove or replace. reset_progress deletes the
+organizing progress: only with explicit consent.
 
-Data comes from Spotify. When you mention playlists or tracks, include their Spotify links
-where the tool gave you one.
-
-Definitions (use them when the user asks what a number means):
-- Unique tracks: distinct Spotify track IDs; a track saved in two playlists counts once.
-  Entries: every saved occurrence (it counts twice). Artists are PRIMARY artists only;
-  featured artists show as "A feat. B" but aren't counted.
-- Popularity: Spotify's 0-100 score from play counts and how recent they are. It reflects
-  current global popularity, not the user's listening. Spotify gives 0 to album versions it
-  replaced with a newer release (it plays the new one instead); for those, Tailorlist uses the
-  popularity of the version Spotify plays now (find_replaced_tracks lists them). "Avg
-  popularity" averages unique tracks.
-- Release year: the album's release date, so compilations and reissues count with the
-  album's year, not the song's original year.
-- Top decade: the decade with the most unique tracks. Median era: the median release year of
-  unique tracks. Listening span: newest minus oldest release year.
-- Listening age: median era - 16 = estimated birth year (the age music taste forms); listening
-  age = this year - that. Example: median 1994 -> born 1978 -> 48.
-- Playlist growth: tracks added per month; a playlist whose tracks all share one date was
-  built in a single session.
-- Genres come from the primary artist (Spotify's tags, or MusicBrainz's when Spotify has
-  none), not from the track. collection_stats group_by="genre" counts EXACT tags (a track is
-  counted under each tag of its artist). The dashboards' genre list counts sub-genres too:
-  "rock" includes "indie rock". Tracks without any tag are "untagged".
-- Genre families: Rock, Pop, Hip-Hop, Electronic, Jazz, Classical, Folk, Latin, Reggae, Other.
-  A family matches when any of its keywords appears inside a genre tag (so "baroque pop" is
-  Pop); a track can belong to several families; no match means Other. Keywords: Rock = rock,
-  punk, metal, grunge, hardcore, emo, shoegaze; Pop = pop; Hip-Hop = hip hop, rap, trap, drill,
-  r&b, soul, grime; Electronic = electronic, edm, house, techno, trance, ambient, synthwave,
-  disco, new wave, dubstep, drum and bass, electro, downtempo, chillwave, darkwave, cold wave,
-  eurodance, italo; Jazz = jazz, bebop, swing, blues, big band, boogie; Classical = classical,
-  opera, orchestra, chamber; Folk = folk, acoustic, singer-songwriter, country, americana,
-  bluegrass, newgrass, honky tonk; Latin = latin, reggaeton, salsa, cumbia, bossa nova,
-  bachata, tango, bolero, merengue, mariachi, ranchera, mpb, trova, soca, calypso, folklore,
-  folclor, candombe, murga, villancico; Reggae = reggae, dancehall, ska, ragga, riddim, dub.
-  "Other" often holds adult standards, chanson, christmas, comedy, doo-wop, drone, easy
-  listening, gospel, new age, schlager, soundtrack and very niche tags.
-- Exact duplicate: the same Spotify ID saved more than once (inside one playlist or across
-  playlists). Different versions: the same song and primary artist under different IDs
-  (album vs. compilation, remaster, live...). Version suffixes are ignored when comparing
-  names, so "Song", "Song - Remastered 2009", "Song - Live" and "Song (Acoustic Version)"
-  match; remixes count as different songs.
-- Genre diversity: distinct genre tags among a playlist's artists. Playlist age: when its
-  first track was added.
+Link to Spotify whenever a tool gives you a link.
 """
 
 OVERVIEW_URI = "ui://tailorlist/overview.html"
@@ -444,6 +371,39 @@ def edit_draft(draft: str, changes: list[drafts.Change]) -> CallToolResult:
 mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__, extensions=[apps])
 
 
+
+START_PROMPT = """\
+Introduce yourself in one line as the user's music curator for their Spotify library, then
+offer what you can do as a short list they can pick from:
+
+Understand your collection
+ • Overview of everything: decades, genres, artists, popularity, how it grew
+ • Deep dive into one playlist
+ • Compare playlists: overlap, era, diversity
+ • Ask anything: "my most-saved artists", "80s tracks under 3 minutes"...
+
+Clean it up
+ • Duplicates and the same song saved in different versions
+ • Old album versions Spotify replaced, and tracks that no longer play
+ • Fill missing genres (MusicBrainz)
+
+Build better playlists
+ • Group your tracks by decade, genre family or specific genres into drafts
+ • Review and tweak the drafts together, then save them to Spotify
+ • Add or remove tracks in existing playlists (always previewed, undoable)
+ • Track how much of your library is already organized
+
+If no playlists are loaded yet, say that the first step is choosing which ones to load,
+and offer to list them.
+"""
+
+
+@mcp.prompt(name="start", title="Start with Tailorlist",
+            description="Your music curator introduces itself and lists what it can do with your Spotify library.")
+def start() -> str:
+    return START_PROMPT
+
+
 @mcp.tool()
 def connect_spotify() -> str:
     """Connect Tailorlist to the user's Spotify account (only needed once).
@@ -575,6 +535,20 @@ def find_duplicates(playlists: list[str] | None = None, kind: str = "all", limit
         limit: rows per list (default 50, max 500).
     """
     return _answer(queries.find_duplicates, playlists, kind, limit)
+
+
+@mcp.tool()
+def explain(term: str = "") -> str:
+    """What a Tailorlist number or term means: unique tracks vs. entries, popularity, release year,
+    top decade, median era, listening age, playlist growth, genres, genre families (with their
+    keywords), genre diversity, duplicates vs. different versions, replaced versions, organized.
+    Call it before explaining a metric to the user.
+
+    Args:
+        term: a term or part of one ("listening age", "families"); "all" for every definition;
+            empty for the list of terms.
+    """
+    return glossary.explain(term)
 
 
 @mcp.tool()
