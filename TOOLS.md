@@ -64,14 +64,14 @@ dashboards, data tools for everything else).
 |---|---|---|
 | `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | ✅ (KMeans ⏳4) |
 | `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | ✅ |
-| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | ✅ (marking done on write: ⏳3, hook `drafts.mark_group_written`) |
-| `create_playlist(name, tracks or draft group, description, public)` | export to Spotify (the app used Spotlistr); always previews and asks first; Claude suggests the name | 3 |
-| `write_draft(draft, groups?, names?, public?)` | (new) one playlist per draft group in a single preview; marks the tracks done | 3 |
-| `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | 3 |
-| `replace_versions(playlist?)` | (new, from the backlog) swap replaced album versions for the current version, same position | 3 |
-| `undo_last_write()` | (new) revert the last add, remove or replace | 3 |
-| `confirm_write(code)` | (new) the only tool that writes: carries out a previewed plan; keep it on "ask every time" | 3 |
-| `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | 3 |
+| `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | ✅ (`write_draft` / `create_playlist` from a group mark exactly the written tracks done) |
+| `create_playlist(name, tracks or draft group, description)` | export to Spotify (the app used Spotlistr); always previews and asks first; Claude suggests the name | ✅ |
+| `write_draft(draft, groups?, names?)` | (new) one playlist per draft group in a single preview; marks the tracks done | ✅ |
+| `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | ✅ |
+| `replace_versions(playlist?)` | (new, from the backlog) swap replaced album versions for the current version, same position | ✅ |
+| `undo_last_write()` | (new) revert the last add, remove or replace | ✅ |
+| `confirm_write(code)` | (new) the only tool that writes: carries out a previewed plan; keep it on "ask every time" | ✅ |
+| `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | ✅ |
 
 ### Audio (Phase 4)
 
@@ -84,7 +84,7 @@ charts), plus audio sections in `show_playlist`.
 
 | Tool | What |
 |---|---|
-| `find_replaced_tracks` ✅ / `replace_versions` (3) | popularity-0 album versions and their current version, offer to swap |
+| `find_replaced_tracks` ✅ / `replace_versions` ✅ | popularity-0 album versions and their current version, offer to swap |
 | `original_years` | original release year (MusicBrainz by ISRC), compilations flagged, stats on original years |
 | `sequence_tracks(curve)` | order a playlist by an energy/tempo curve (planned for the archived agent) |
 
@@ -142,7 +142,7 @@ Mode (Alt7: 5, JC: 19).
      `compare_playlists`, `show_playlist`, metric definitions in the instructions.
    - **2b ✅.** `group_tracks` (category and genre modes), `show_draft`, `edit_draft`,
      `organize_progress` / `reset_progress`.
-3. Write: `create_playlist`, `write_draft`, `add_tracks`, `remove_tracks`, `replace_versions`,
+3. ✅ Write: `create_playlist`, `write_draft`, `add_tracks`, `remove_tracks`, `replace_versions`,
    `undo_last_write`, `confirm_write`, `export_tracks` (plan in [PLAN.md](PLAN.md)).
 4. Audio: `fetch_audio_features`, KMeans mode, audio metrics in the data tools and dashboards.
 5. Launch.

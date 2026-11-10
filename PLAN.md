@@ -64,8 +64,19 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
 2. **Analysis.** (2a done 2026-11-09: `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`, `compare_playlists`, `show_playlist`, metric definitions in the instructions; 2b done 2026-11-09: `group_tracks` (category and genres modes), `show_draft`, `edit_draft`, `organize_progress`, `reset_progress`; KMeans waits for phase 4.) Genre families (Spotify + MusicBrainz), duplicates, playlist comparison,
    `cluster` (by genre family, by category, KMeans). Tool shapes from the archived
    `agent/tools.py` of the Streamlit app.
-3. **Write.** Create and edit playlists, always previewed and confirmed. Detailed plan below
-   (agreed with Facu 2026-11-10).
+3. **Write.** Done 2026-11-10 (steps 1-7 of the plan below). `create_playlist`, `write_draft`,
+   `add_tracks`, `remove_tracks`, `replace_versions`, `undo_last_write` only preview and return a
+   single-use code; `confirm_write(code)` is the only tool that writes; `export_tracks` is read-only.
+   Plans live in `pending_writes`, every Spotify call is logged in `writes`, partial failures are
+   reported exactly, edited playlists are re-read. 302 tests (fake Spotify with positions, failures,
+   lagging snapshots). Real run on a private scratch playlist (the playlist "test-tailorlist" did not
+   exist in the account): add at a position, remove (including a duplicated track), add 120 in two batches,
+   replace of two replaced versions (same position), and an undo of each one, all exact; previews take
+   0.5-3 s, a confirmation 2-4 s (120 tracks = 2 calls). Two findings: Spotify ignores `public: false`
+   when creating (see "Phase 3 checks"), and `GET playlists/{id}` returns a stale `snapshot_id` for
+   several seconds after a write, so "changed since the preview" is judged by the playlist's content
+   (hash of its ordered track IDs), not by the snapshot. The real two-group `write_draft` was NOT
+   confirmed because the playlists would have come out public.
 4. **Audio features.** ReccoBeats, Audio DNA.
 5. **Launch.** README with the Spotify app walkthrough, `uvx` install, Claude Desktop
    extension if feasible, 2-minute demo video, post. README states the Spotify AI-clause
@@ -102,8 +113,11 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
 
 ### Decisions
 
-- **Visibility:** Claude asks the user before the preview; the preview states it plainly;
-  private when nobody said otherwise.
+- **Visibility:** changed 2026-11-10 after the step-1 check. Spotify creates API-made playlists
+  as public whatever is asked (Facu confirmed it in the app: the scratch playlist offers "Make
+  private"), and the API can't flip it. So there is no `public` parameter and Claude doesn't ask:
+  the preview and the result say the playlist will be / is public and how to make it private in
+  the app. The MCP still asks Spotify for private, in case Spotify fixes it.
 - **Names:** Claude suggests a name for each new playlist (e.g. "Rock de los 80" for the group
   "1980s · Rock"); the preview shows it and the user approves or changes it. The group name is the
   fallback. The date and the origin go in the description, not the name: "Made with Tailorlist on
@@ -132,8 +146,8 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
 
 | Tool | What |
 |---|---|
-| `create_playlist(name, tracks or draft+group, description?, public?)` | new playlist with exact tracks, in order |
-| `write_draft(draft, groups?, names?, public?)` | one playlist per draft group, all in one preview; marks the tracks done |
+| `create_playlist(name, tracks or draft+group, description?)` | new playlist with exact tracks, in order |
+| `write_draft(draft, groups?, names?)` | one playlist per draft group, all in one preview; marks the tracks done |
 | `add_tracks(playlist, tracks, position?)` | add to an existing playlist; tracks already in it are skipped |
 | `remove_tracks(playlist, tracks)` | take tracks out of a playlist |
 | `replace_versions(playlist?)` | swap the replaced album versions (see `find_replaced_tracks`) for the current version, same position; their added date becomes today |
@@ -158,6 +172,22 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
 Verification: tests with a fake client; a real run on `test-tailorlist` (create, add, remove,
 replace, undo) and writing a real two-group draft. That creates two real playlists in Facu's
 account, which he deletes by hand afterwards (the MCP never deletes).
+
+### Phase 3 checks (2026-11-10, real API, this app)
+
+- `POST playlists/{id}/items` with `position` is honoured (2 tracks at position 2 landed at indexes 2-3;
+  at 0 they went first). `DELETE playlists/{id}/items` with `{"items": [{"uri"}]}` works and removes every
+  copy; a stale `snapshot_id` in the body is accepted and ignored (it guards nothing).
+- **`public: false` is ignored.** `POST me/playlists` answered `"public": false`, but a read of the
+  playlist (and `GET me/playlists`) says `public: true`, and `PUT playlists/{id}` with `{"public": false}`
+  returns 200 and changes nothing. Existing private playlists do read `false`. So playlists created by
+  the MCP are public until the user flips them in Spotify; the preview says so and `confirm_write` reads the
+  real visibility back. Facu checked the app ("Make private" offered: really public) and decided to
+  accept it: see Decisions, Visibility.
+- `GET playlists/{id}` keeps the old `snapshot_id` for up to ~8 s after a write; the items endpoint is
+  current at once. Hence the content hash.
+- Deviations: newly created playlists are not loaded into the cache (they would add their tracks to the
+  analysis as duplicates); edited playlists that are in the cache are re-read.
 
 ## Terms and licences (checked 2026-11-09)
 

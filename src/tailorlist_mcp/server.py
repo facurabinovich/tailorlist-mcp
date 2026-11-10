@@ -16,7 +16,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, genre_fill, progress, queries, settings, store
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, progress, queries, settings, store, write
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -58,12 +58,27 @@ group_tracks with preview_only=true to see the counts -> group_tracks (mode "cat
 and/or genre family; mode "genres": one group per chosen genre tag) -> the draft opens as a
 dashboard (show_draft shows it again, with no argument the latest) -> review it with the user ->
 edit_draft (rename, move, assign unmatched tracks, drop or merge groups, keep a group visible,
-skip the unmatched) -> (a later phase) write the playlists to Spotify. A draft changes nothing on
-Spotify. RULE: show the user the draft and get their OK before anything is written; never decide
-the groups' final shape or write on your own. Tracks already organized ("done") leave the pool
+skip the unmatched) -> write_draft. A draft changes nothing on Spotify. RULE: show the user the
+draft and get their OK before anything is written; never decide the groups' final shape or write
+on your own. Tracks already organized ("done") leave the pool
 of the next grouping; organize_progress shows the % organized; reset_progress DELETES that
 progress: only after the user explicitly agrees (confirm=true). Grouping by audio similarity
 (KMeans) is not available yet (it needs audio features).
+Writing to Spotify (Phase 3): create_playlist, write_draft, add_tracks, remove_tracks,
+replace_versions and undo_last_write only PREVIEW: they write nothing and return a preview with a
+confirmation code. confirm_write(code) is the only tool that writes. Workflow: suggest a name for each new playlist
+(e.g. "Rock de los 80" for the group "1980s · Rock") and let them change it; call the preview tool;
+show the preview; call confirm_write ONLY after the user explicitly says yes to that preview, never
+on your own. If a preview lists replaced album versions or tracks not playable in the user's
+country it returns no code: ask the user (all current versions, which is the version Spotify
+actually plays, with up-to-date stats and often a newer remaster, so recommend it; or keep the saved
+ones; or current except some; for unplayable ones keep or leave out) and call the tool again with
+their choice. New playlists made from a draft group mark exactly the written tracks as done.
+Playlists are never deleted. Spotify creates API-made playlists as PUBLIC (it ignores a private
+request): don't ask about visibility; tell the user before confirming and, after, that they can make
+it private in the Spotify app (... > Make private). After a write the edited
+playlists are re-read. undo_last_write reverts the last add, remove or replace.
+export_tracks gives "Artist - Song" text, track URLs or CSV for a playlist or draft group.
 Playlist arguments accept a name, a unique part of a name, an ID or a Spotify link.
 
 Data comes from Spotify. When you mention playlists or tracks, include their Spotify links
@@ -597,6 +612,163 @@ def compare_playlists(playlists: list[str] | None = None) -> str:
         playlists: names, IDs or links; default all loaded playlists.
     """
     return _answer(queries.compare_playlists, playlists)
+
+
+# ---------------------------------------------------------------- Phase 3: writing (preview tools + confirm_write)
+
+async def _write_tool(fn) -> str:
+    """Run a preview/confirm function with a Spotify client and the cache; its errors become tool errors."""
+    client = _client()
+
+    def work() -> str:
+        with closing(store.connect()) as conn:
+            try:
+                return fn(conn, client)
+            except (write.WriteError, drafts.DraftError, queries.QueryError, dashboard.PlaylistNotFound, ValueError) as exc:
+                raise ToolError(str(exc)) from exc
+
+    return await anyio.to_thread.run_sync(lambda: _spotify_call(work))
+
+
+@mcp.tool()
+async def create_playlist(
+    name: str,
+    tracks: list[str] | None = None,
+    draft: str | None = None,
+    group: str | None = None,
+    description: str | None = None,
+    versions: str | None = None,
+    keep_saved: list[str] | None = None,
+    unavailable: str | None = None,
+) -> str:
+    """PREVIEW ONLY, writes nothing: a new playlist with exact tracks, in order. Returns the preview and a
+    confirmation code; the playlist is created only when the user agrees and you call confirm_write(code).
+    Spotify creates it PUBLIC (the user can make it private in the app afterwards). Suggest a good name yourself
+    (e.g. "Rock de los 80" for the group "1980s - Rock") and let the user approve or change it. If a
+    draft group is used, its tracks are marked done once written (unless the group is kept visible).
+
+    Args:
+        name: the playlist's name. If the account already has one with that name the preview says so and uses "<name> (2)".
+        tracks: track IDs, spotify:track: URIs or links, in the order wanted. Or use draft + group instead.
+        draft: a draft ID ("d3"); with group, the group's name (or a unique part).
+        description: default "Made with Tailorlist on <date> from <playlists>" (300 characters max).
+        versions: what to do with album versions Spotify replaced (see find_replaced_tracks): "current" (write
+            the version Spotify plays now; recommended) or "saved" (keep the saved ones). With replaced versions
+            in the tracks and no choice, NO code is returned: the preview lists them and the user must choose.
+        keep_saved: with versions="current", track IDs to keep as saved anyway.
+        unavailable: tracks not playable in the user's country: "keep" or "leave_out". Same rule as versions.
+    """
+    return await _write_tool(lambda conn, client: write.create_playlist(
+        conn, client, name, tracks, draft, group, description, versions, keep_saved, unavailable))
+
+
+@mcp.tool()
+async def write_draft(
+    draft: str,
+    groups: list[str] | None = None,
+    names: dict[str, str] | None = None,
+    versions: str | None = None,
+    keep_saved: list[str] | None = None,
+    unavailable: str | None = None,
+) -> str:
+    """PREVIEW ONLY, writes nothing: one new playlist per draft group, all in one preview and one
+    confirmation code. Writing it (confirm_write) creates the playlists and marks exactly the written
+    tracks as done (not groups kept visible). The playlists come out PUBLIC (Spotify ignores private);
+    suggest a name for each group (names) and show the preview before confirming.
+
+    Args:
+        draft: the draft ID ("d3").
+        groups: which groups to write (names or unique parts); default all groups with tracks.
+        names: {group: playlist name}; a group without an entry uses its own name. Names already in the account get " (2)".
+        versions: what to do with album versions Spotify replaced (see find_replaced_tracks): "current" (write
+            the version Spotify plays now; recommended) or "saved" (keep the saved ones). With replaced versions
+            in the tracks and no choice, NO code is returned: the preview lists them and the user must choose.
+        keep_saved: with versions="current", track IDs to keep as saved anyway.
+        unavailable: tracks not playable in the user's country: "keep" or "leave_out". Same rule as versions.
+    """
+    return await _write_tool(lambda conn, client: write.write_draft(
+        conn, client, draft, groups, names, versions, keep_saved, unavailable))
+
+
+@mcp.tool()
+async def add_tracks(playlist: str, tracks: list[str], position: int | None = None) -> str:
+    """PREVIEW ONLY, writes nothing: add tracks to one of the user's own playlists (or a collaborative one).
+    Reads the playlist live from Spotify; tracks already in it are skipped. Returns the preview and a code
+    for confirm_write.
+
+    Args:
+        playlist: name, unique part of a name, ID or link.
+        tracks: track IDs, spotify:track: URIs or links, in the order wanted.
+        position: 0-based position to insert at (0 = the start); default the end.
+    """
+    return await _write_tool(lambda conn, client: write.add_tracks(conn, client, playlist, tracks, position))
+
+
+@mcp.tool()
+async def remove_tracks(playlist: str, tracks: list[str]) -> str:
+    """PREVIEW ONLY, writes nothing: take tracks out of one of the user's own playlists (or a collaborative
+    one). Reads the playlist live. Spotify removes EVERY copy of a track that is in the playlist twice: the
+    preview says which. Returns the preview and a code for confirm_write. Never deletes playlists.
+
+    Args:
+        playlist: name, unique part of a name, ID or link.
+        tracks: track IDs, spotify:track: URIs or links.
+    """
+    return await _write_tool(lambda conn, client: write.remove_tracks(conn, client, playlist, tracks))
+
+
+@mcp.tool()
+async def replace_versions(playlist: str | None = None) -> str:
+    """PREVIEW ONLY, writes nothing: swap album versions Spotify replaced (popularity 0, see
+    find_replaced_tracks) for the version it plays now, in the same position. Their "added" date becomes
+    today. Without a playlist, covers every loaded playlist the user can edit, as ONE operation (one
+    confirm_write, one undo_last_write). Returns the preview and a code.
+
+    Args:
+        playlist: name, unique part of a name, ID or link; default all loaded playlists.
+    """
+    return await _write_tool(lambda conn, client: write.replace_versions(conn, client, playlist))
+
+
+@mcp.tool()
+async def undo_last_write() -> str:
+    """PREVIEW ONLY, writes nothing: revert the last confirmed add, remove or replace (all the playlists it
+    touched). Not for created playlists (Tailorlist never deletes), refused if a playlist changed since, and an
+    undo can't itself be undone. Returns the preview and a code for confirm_write."""
+    return await _write_tool(lambda conn, client: write.undo_last_write(conn, client))
+
+
+@mcp.tool()
+async def confirm_write(code: str) -> str:
+    """THE ONLY TOOL THAT WRITES TO SPOTIFY. Carries out exactly the plan a preview tool returned the code
+    for. Call it only after the user has seen that preview and explicitly said yes to it; never on your own
+    and never for a preview they haven't seen. Codes are single use and expire after 30 minutes. If the
+    playlist or the draft changed since the preview, nothing is written and a new preview is needed. If
+    something fails half way, the result says exactly what was and wasn't written.
+
+    Args:
+        code: the confirmation code from the preview.
+    """
+    return await _write_tool(lambda conn, client: write.confirm(client, conn, code))
+
+
+@mcp.tool()
+def export_tracks(playlist: str | None = None, draft: str | None = None, group: str | None = None, format: str = "text") -> str:
+    """A track list as text, from the cache; writes nothing anywhere. "text" is "Artist - Song" (primary
+    artist), one per line, for tools like Spotlistr; "urls" is Spotify track links; "csv" has group, track,
+    artists, album, year, id and link.
+
+    Args:
+        playlist: a loaded playlist (name, unique part, ID or link), in playlist order. Or use draft.
+        draft: a draft ID; with group one group, otherwise every group.
+        group: the group's name (or a unique part).
+        format: "text", "urls" or "csv".
+    """
+    with closing(store.connect()) as conn:
+        try:
+            return export.export_tracks(conn, playlist, draft, group, format)
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError, ValueError) as exc:
+            raise ToolError(str(exc)) from exc
 
 
 @mcp.tool()

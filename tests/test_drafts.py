@@ -232,14 +232,12 @@ def test_selector_needs_something_and_changes_are_strict(conn):
 
 # ---------------------------------------------------------------- progress
 
-def test_written_group_is_marked_done_unless_kept_visible(conn):
-    """The hook Phase 3 calls after writing a playlist."""
+def test_marked_tracks_show_a_group_as_done(conn):
+    """What write.confirm does after a group was written: its tracks become done (a manual row is upgraded)."""
     d = make(conn)
     edit(conn, d, {"op": "assign", "tracks": {"track_ids": ["t6"]}, "to": "Pop"})
-    assert drafts.mark_group_written(conn, "d1", "Pop") == 2
-    assert {t: p["status"] for t, p in progress.load(conn).items()} == {"t3": "done", "t6": "done"}   # the manual row became done
-    edit(conn, d, {"op": "keep_visible", "group": "Rock · 1990s"})
-    assert drafts.mark_group_written(conn, "d1", "Rock · 1990s") == 0
+    assert progress.mark_done(conn, ["t3", "t6"], "Pop") == 2
+    assert {t: p["status"] for t, p in progress.load(conn).items()} == {"t3": "done", "t6": "done"}
     data = drafts.draft_data(conn, d)
     assert [g["name"] for g in data["groups"] if g["done"]] == ["Pop · 2000s"]
 

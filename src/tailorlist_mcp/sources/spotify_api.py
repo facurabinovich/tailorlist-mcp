@@ -15,6 +15,7 @@ from tailorlist_mcp.sources import spotify_auth
 API = "https://api.spotify.com/v1"
 
 _MAX_RETRIES = 5
+MAX_PER_CALL = 100       # tracks per add/remove call
 
 
 class SpotifyError(RuntimeError):
@@ -70,7 +71,7 @@ class SpotifyClient:
         return list(self.paged("me/playlists", limit=50))
 
     def playlist(self, playlist_id: str) -> dict:
-        return self.get(f"playlists/{playlist_id}", fields="id,name,owner(id,display_name),snapshot_id,external_urls,followers(total)")
+        return self.get(f"playlists/{playlist_id}", fields="id,name,owner(id,display_name),snapshot_id,external_urls,followers(total),collaborative,public")
 
     def playlist_items(self, playlist_id: str) -> Iterator[dict]:
         return self.paged(f"playlists/{playlist_id}/items", limit=100)
@@ -86,6 +87,30 @@ class SpotifyClient:
                 params["market"] = market
             out.extend(self.get("tracks", **params).get("tracks") or [])
         return out
+
+    # ---------------------------------------------------------------- writes (scopes playlist-modify-*)
+
+    def create_playlist(self, name: str, description: str = "", public: bool = False) -> dict:
+        """Create an empty playlist in the user's account. Returns Spotify's playlist object."""
+        return self.request("POST", "me/playlists", json={"name": name, "description": description, "public": public})
+
+    def add_items(self, playlist_id: str, uris: list[str], position: int | None = None) -> str:
+        """Add up to 100 track URIs, in order, at the end or at `position`. Returns the new snapshot_id."""
+        if len(uris) > MAX_PER_CALL:
+            raise ValueError(f"Spotify takes {MAX_PER_CALL} tracks per call.")
+        body: dict = {"uris": uris}
+        if position is not None:
+            body["position"] = position
+        return self.request("POST", f"playlists/{playlist_id}/items", json=body).get("snapshot_id") or ""
+
+    def remove_items(self, playlist_id: str, uris: list[str], snapshot_id: str | None = None) -> str:
+        """Remove up to 100 track URIs (every occurrence of each). Returns the new snapshot_id."""
+        if len(uris) > MAX_PER_CALL:
+            raise ValueError(f"Spotify takes {MAX_PER_CALL} tracks per call.")
+        body: dict = {"items": [{"uri": u} for u in uris]}
+        if snapshot_id:
+            body["snapshot_id"] = snapshot_id
+        return self.request("DELETE", f"playlists/{playlist_id}/items", json=body).get("snapshot_id") or ""
 
     def search_tracks(self, query: str, limit: int = 5) -> list[dict]:
         """Track search, every market (market=from_token needs the user-read-private scope; check

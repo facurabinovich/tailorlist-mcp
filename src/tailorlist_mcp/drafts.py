@@ -680,21 +680,3 @@ def apply_changes(conn: sqlite3.Connection, d: dict, changes: list) -> list[str]
         progress.reopen(conn, reopen)
     save_draft(conn, d)
     return notes
-
-
-# ---------------------------------------------------------------- hook for Phase 3 (writing playlists)
-
-def mark_group_written(conn: sqlite3.Connection, draft_id: str, group_name: str) -> int:
-    """Phase 3 calls this after a group was written to Spotify as a playlist.
-
-    The original's "Mark these tracks as done": every track of the group becomes 'done' (a 'manual'
-    row is upgraded; the original left those as 'manual', but once the track is in the playlist it
-    is placed), so they leave the pool of the next grouping and count toward the progress. A group
-    flagged keep_visible is not marked (the original dropped those rows right after marking).
-    Returns how many tracks were marked.
-    """
-    d = load_draft(conn, draft_id)
-    g = _find_group(d["groups"], group_name)
-    if g.get("keep_visible"):
-        return 0
-    return progress.mark_done(conn, g["tracks"])

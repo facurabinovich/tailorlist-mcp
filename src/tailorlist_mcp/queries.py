@@ -502,7 +502,7 @@ def find_replaced_tracks(
            + (f"; not checked yet: {len(unchecked)} (load_playlists checks them)" if unchecked else "") + "."]
     if replaced:
         out.append(f"\nReplaced: Spotify plays the current version instead of the saved one; stats use the current "
-                   f"version's popularity. Swapping the saved ID needs the write tools (a later phase)."
+                   f"version's popularity. replace_versions swaps the saved ID for the current one (with a preview)."
                    + (f" Showing {limit}." if len(replaced) > limit else ""))
         out.append(_table(
             ["Track", "Artist", "Playlists", "Saved from", "Now from", "Popularity now", "Saved link", "Current link"],

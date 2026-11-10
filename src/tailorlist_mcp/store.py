@@ -85,6 +85,26 @@ CREATE TABLE IF NOT EXISTS drafts (              -- Phase 2b: groupings waiting 
     updated_at INTEGER NOT NULL,
     data       TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pending_writes (      -- Phase 3: previewed plans waiting for confirm_write (single-use codes)
+    code       TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    plan       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS writes (              -- Phase 3: write log, one row per playlist of a confirmed operation
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    op_id         TEXT NOT NULL,                 -- the confirmation code: rows of one operation share it
+    at            INTEGER NOT NULL,
+    kind          TEXT NOT NULL,                 -- create, add, remove, replace, undo
+    playlist_id   TEXT,
+    playlist_name TEXT,
+    ops           TEXT NOT NULL,                 -- JSON: what was asked for this playlist
+    batches       TEXT NOT NULL DEFAULT '[]',    -- JSON: one entry per Spotify call that went through
+    snapshot_id   TEXT,                          -- the snapshot_id Spotify returned for the last batch
+    content_hash  TEXT,                          -- hash of the playlist's ordered track IDs after the write (the undo checks it)
+    status        TEXT NOT NULL,                 -- running, done, partial, failed
+    undone        INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # Columns added after the first release: (table, column, type). Applied with ALTER TABLE so existing caches keep their data.
