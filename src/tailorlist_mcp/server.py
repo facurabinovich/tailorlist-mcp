@@ -48,6 +48,8 @@ the cache has every track. Don't browse Spotify's website or look for the cache 
     dates, duration, text) and sorting. Capped: narrow the filters instead of asking for more.
   - find_duplicates, compare_playlists, get_playlist_tracks: duplicates, playlist-vs-playlist
     numbers, one playlist's tracks in order.
+  - find_replaced_tracks: tracks with popularity 0, i.e. versions Spotify replaced (and which
+    version it plays now) or that aren't playable in the user's country (with alternatives).
   - fill_genres: Spotify leaves many artists without genres; this looks them up in MusicBrainz in
     the background (a few minutes per hundred artists). Offer it when many tracks have no genre;
     don't start it without the user's OK. Call it again to see progress.
@@ -72,8 +74,10 @@ Definitions (use them when the user asks what a number means):
   Entries: every saved occurrence (it counts twice). Artists are PRIMARY artists only;
   featured artists show as "A feat. B" but aren't counted.
 - Popularity: Spotify's 0-100 score from play counts and how recent they are. It reflects
-  current global popularity, not the user's listening, and is 0 for album versions Spotify
-  replaced with a newer release. "Avg popularity" averages unique tracks.
+  current global popularity, not the user's listening. Spotify gives 0 to album versions it
+  replaced with a newer release (it plays the new one instead); for those, Tailorlist uses the
+  popularity of the version Spotify plays now (find_replaced_tracks lists them). "Avg
+  popularity" averages unique tracks.
 - Release year: the album's release date, so compilations and reissues count with the
   album's year, not the song's original year.
 - Top decade: the decade with the most unique tracks. Median era: the median release year of
@@ -556,6 +560,30 @@ def find_duplicates(playlists: list[str] | None = None, kind: str = "all", limit
         limit: rows per list (default 50, max 500).
     """
     return _answer(queries.find_duplicates, playlists, kind, limit)
+
+
+@mcp.tool()
+async def find_replaced_tracks(playlists: list[str] | None = None, limit: int = queries.DEFAULT_LIMIT) -> str:
+    """Tracks with popularity 0, explained: album versions Spotify replaced with a newer release
+    (with the version it plays now, its album, popularity and link), and tracks not playable in the
+    user's country (with playable alternatives found by searching Spotify). Read-only: nothing
+    changes on Spotify. Stats already use the current version's popularity for replaced tracks.
+
+    Args:
+        playlists: names, IDs or links; default all loaded playlists.
+        limit: rows per list (default 50, max 500).
+    """
+    client = _client()
+
+    def work() -> str:
+        with closing(store.connect()) as conn:
+            try:
+                collection.relink_popularity_zero(client, conn)  # tracks loaded before this check existed
+                return queries.find_replaced_tracks(conn, playlists, limit, client=client)
+            except (queries.QueryError, dashboard.PlaylistNotFound) as exc:
+                raise ToolError(str(exc)) from exc
+
+    return await anyio.to_thread.run_sync(lambda: _spotify_call(work))
 
 
 @mcp.tool()

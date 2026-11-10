@@ -137,3 +137,76 @@ def test_forget_deletes_the_file(tmp_path):
     assert store.forget(path) is True
     assert not path.exists()
     assert store.forget(path) is False
+
+
+# ---------------------------------------------------------------- popularity 0: relinking
+
+class RelinkClient(FakeClient):
+    """t1 is a replaced album version (relinked to n1), t3 is unavailable, t2 is popular."""
+
+    def __init__(self):
+        super().__init__()
+        for rows in self.items.values():
+            for row in rows:
+                if row["item"].get("id") in ("t1", "t3"):
+                    row["item"]["popularity"] = 0
+        self.track_calls = []
+
+    def tracks(self, ids, market=None):
+        self.track_calls.append((list(ids), market))
+        out = []
+        for i in ids:
+            if market and i == "t1":
+                out.append({"id": "n1", "popularity": 0, "is_playable": True, "linked_from": {"id": "t1"}})
+            elif market and i in ("t3", "gone"):
+                out.append({"id": i, "popularity": 0, "is_playable": False})
+            elif market and i == "alt3":
+                out.append({"id": "alt3", "is_playable": True})
+            elif i == "n1":
+                out.append({"id": "n1", "popularity": 66, "album": {"name": "Album t1"},
+                            "external_urls": {"spotify": "https://open.spotify.com/track/n1"}})
+            else:
+                out.append(None)
+        return out
+
+    def search_tracks(self, query, limit=5):
+        return [{"id": "gone", "name": "Three", "popularity": 80, "artists": [{"name": "AR3"}], "album": {}},
+                {"id": "alt3", "name": "Three, - Remastered", "popularity": 40, "artists": [{"name": "AR3"}],
+                 "album": {"name": "Best Of", "release_date": "2005-01-01"},
+                 "external_urls": {"spotify": "https://open.spotify.com/track/alt3"}},
+                {"id": "x", "name": "Three", "popularity": 90, "artists": [{"name": "Someone else"}], "album": {}}]
+
+
+def test_load_relinks_popularity_zero_tracks(conn):
+    client = RelinkClient()
+    collection.load_playlists(client, conn, [PL_A, PL_B])
+    asked, market = client.track_calls[0]
+    assert sorted(asked) == ["t1", "t3"] and market == "from_token"
+    t1 = conn.execute("SELECT * FROM tracks WHERE id = 't1'").fetchone()
+    assert (t1["current_id"], t1["current_popularity"], t1["unavailable"]) == ("n1", 66, 0)
+    assert conn.execute("SELECT unavailable, current_id FROM tracks WHERE id = 't3'").fetchone()[:] == (1, None)
+
+    # Asked once: a forced reload keeps the answer while the track is still at popularity 0.
+    client.track_calls.clear()
+    collection.load_playlists(client, conn, [PL_A, PL_B], force=True)
+    assert client.track_calls == []
+    assert conn.execute("SELECT current_id FROM tracks WHERE id = 't1'").fetchone()[0] == "n1"
+
+
+def test_stats_use_the_current_versions_popularity(conn):
+    from tailorlist_mcp import dashboard
+    collection.load_playlists(RelinkClient(), conn, [PL_A, PL_B])
+    pops = {r["id"]: r["popularity"] for r in dashboard.records(conn)}
+    assert pops == {"t1": 66, "t2": 50, "t3": 0}
+
+
+def test_find_replaced_tracks(conn):
+    from tailorlist_mcp import queries
+    client = RelinkClient()
+    collection.load_playlists(client, conn, [PL_A, PL_B])
+    out = queries.find_replaced_tracks(conn, client=client)
+    assert "Replaced by another version: 1; not playable in your country: 1" in out
+    assert "One | AR1 | Alpha | Album t1 | (same album) | 66 |" in out
+    assert "Three, - Remastered - Best Of (2005), popularity 40, https://open.spotify.com/track/alt3" in out
+    assert "Someone else" not in out and "90" not in out and "80" not in out  # other artist; not playable here
+    assert "Beta" in out and "Alpha" not in queries.find_replaced_tracks(conn, ["Beta"], client=client).split("Not playable")[1]

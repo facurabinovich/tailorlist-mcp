@@ -55,6 +55,7 @@ dashboards, data tools for everything else).
 | `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | ✅ |
 | `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
 | `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
+| `find_replaced_tracks(playlists?)` | tracks with popularity 0: album versions Spotify replaced (with the version it plays now, from relinking) and tracks not playable in the user's country (with alternatives from search). Stats use the current version's popularity. Not in the original app | ✅ |
 | `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | ✅ |
 
 ### Building playlists (My Clusters + Cluster Results)

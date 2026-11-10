@@ -52,7 +52,10 @@ def records(conn: sqlite3.Connection) -> list[dict]:
             "secondary_artists": ", ".join(a["name"] for a in artists[1:]),
             "playlist_name": r["playlist_name"],
             "album": r["album"],
-            "popularity": r["popularity"],
+            # Option A (2026-11-10): a replaced album version (popularity 0) counts with the
+            # popularity of the version Spotify serves instead.
+            "popularity": r["current_popularity"]
+            if r["popularity"] == 0 and r["current_id"] and r["current_popularity"] is not None else r["popularity"],
             "duration_ms": r["duration_ms"],
             "release_date": r["release_date"],
             "added_at": r["added_at"],

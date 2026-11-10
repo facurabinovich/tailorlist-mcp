@@ -12,6 +12,7 @@ size and follower rankings), overview (decade / popularity-bin / month conventio
 from __future__ import annotations
 
 import datetime
+import re
 import sqlite3
 
 import pandas as pd
@@ -19,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from tailorlist_mcp import dashboard
 from tailorlist_mcp.analysis import comparison
+from tailorlist_mcp.analysis.duplicates import song_key
 from tailorlist_mcp.analysis import overview as ov
 from tailorlist_mcp.analysis.formatting import fmt_duration
 from tailorlist_mcp.analysis.genres import GENRE_FAMILIES, assign_family
@@ -456,3 +458,96 @@ def compare_playlists(conn: sqlite3.Connection, playlists: list[str] | None = No
     out.append(f"Shared unique tracks per pair ({len(pairs)} pairs share at least one; top {min(len(pairs), 30)}):")
     out.append(_table(["Playlist A", "Playlist B", "Shared"], [[a, b, s] for s, a, b in pairs[:30]]) if pairs else "none")
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------- find_replaced_tracks
+
+#: Unavailable tracks searched for alternatives per call (one or two Spotify searches each).
+MAX_SEARCHED = 30
+
+
+def find_replaced_tracks(
+    conn: sqlite3.Connection, playlists: list[str] | None = None, limit: int | None = None, client=None
+) -> str:
+    """Popularity-0 tracks: the ones Spotify replaced with another version (and which one), and
+    the ones not playable in the user's country, with alternatives found by search (needs client)."""
+    limit = _limit(limit)
+    names = None
+    if playlists:
+        names = [dashboard.find_playlist(conn, ref)["name"] for ref in playlists]
+    rows = conn.execute(
+        "SELECT t.id, t.name, t.album, t.release_date, t.isrc, t.url, t.relink_checked_at, t.current_id, "
+        "t.current_popularity, t.current_album, t.current_url, t.unavailable, a.name AS artist, p.name AS playlist "
+        "FROM tracks t JOIN playlist_tracks pt ON pt.track_id = t.id JOIN playlists p ON p.id = pt.playlist_id "
+        "LEFT JOIN track_artists ta ON ta.track_id = t.id AND ta.position = 0 LEFT JOIN artists a ON a.id = ta.artist_id "
+        "WHERE t.popularity = 0 ORDER BY a.name, t.name, p.name"
+    ).fetchall()
+    if not conn.execute("SELECT 1 FROM playlists LIMIT 1").fetchone():
+        raise QueryError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
+    tracks: dict[str, dict] = {}
+    for r in rows:
+        if names is not None and r["playlist"] not in names:
+            continue
+        t = tracks.setdefault(r["id"], {**dict(r), "playlists": []})
+        if r["playlist"] not in t["playlists"]:
+            t["playlists"].append(r["playlist"])
+    scope = ", ".join(names) if names else "all loaded playlists"
+    replaced = [t for t in tracks.values() if t["current_id"]]
+    unavailable = [t for t in tracks.values() if t["unavailable"]]
+    unchecked = [t for t in tracks.values() if t["relink_checked_at"] is None]
+    other = len(tracks) - len(replaced) - len(unavailable) - len(unchecked)
+
+    out = [f"Popularity-0 tracks in {scope}: {len(tracks)}. Replaced by another version: {len(replaced)}; "
+           f"not playable in your country: {len(unavailable)}; playable, simply unpopular: {other}"
+           + (f"; not checked yet: {len(unchecked)} (load_playlists checks them)" if unchecked else "") + "."]
+    if replaced:
+        out.append(f"\nReplaced: Spotify plays the current version instead of the saved one; stats use the current "
+                   f"version's popularity. Swapping the saved ID needs the write tools (a later phase)."
+                   + (f" Showing {limit}." if len(replaced) > limit else ""))
+        out.append(_table(
+            ["Track", "Artist", "Playlists", "Saved from", "Now from", "Popularity now", "Saved link", "Current link"],
+            [[t["name"], t["artist"], ", ".join(t["playlists"]), t["album"],
+              t["current_album"] if t["current_album"] != t["album"] else "(same album)",
+              t["current_popularity"], t["url"], t["current_url"]] for t in replaced[:limit]]))
+    if unavailable:
+        searched = unavailable[:MAX_SEARCHED] if client is not None else []
+        out.append("\nNot playable in your country (no replacement from Spotify)"
+                   + ("; alternatives found by searching Spotify (same artist and song, playable here):" if searched else ":"))
+        rows_out = []
+        for t in unavailable[:limit]:
+            alts = _alternatives(client, t) if t in searched else []
+            rows_out.append([t["name"], t["artist"], ", ".join(t["playlists"]), t["album"], t["url"],
+                             " ; ".join(f"{a['name']} - {a['album']} ({a['year']}), popularity {a['popularity']}, {a['url']}"
+                                        for a in alts) or ("none found" if t in searched else "")])
+        out.append(_table(["Track", "Artist", "Playlists", "Album", "Saved link", "Alternatives"], rows_out))
+    return "\n".join(out)
+
+
+def _loose(name: str) -> str:
+    """song_key without punctuation or spaces: "Viernes, 3AM" and "Viernes 3 AM" match."""
+    return re.sub(r"\W+", "", song_key(name))
+
+
+def _alternatives(client, t: dict, n: int = 3) -> list[dict]:
+    """Playable versions of an unavailable track: same primary artist and song (version suffixes
+    ignored), searched by ISRC first, then by name and artist. Most popular first."""
+    queries_ = ([f"isrc:{t['isrc']}"] if t.get("isrc") else []) + [f'track:"{t["name"]}" artist:"{t["artist"]}"']
+    key, artist = _loose(t["name"]), (t["artist"] or "").casefold()
+    found: dict[str, dict] = {}
+    for q in queries_:
+        for hit in client.search_tracks(q, limit=10):
+            first = ((hit.get("artists") or [{}])[0].get("name") or "").casefold()
+            if hit.get("id") == t["id"] or first != artist or _loose(hit.get("name") or "") != key:
+                continue
+            album = hit.get("album") or {}
+            found[hit["id"]] = {"name": hit.get("name"), "album": album.get("name"),
+                                "year": (album.get("release_date") or "")[:4], "popularity": hit.get("popularity"),
+                                "url": (hit.get("external_urls") or {}).get("spotify")}
+        if found:  # keep only what plays in the user's country
+            ids = list(found)
+            playable = {(c.get("linked_from") or {}).get("id") or c.get("id")
+                        for c in client.tracks(ids, market="from_token") if c and c.get("is_playable") is not False}
+            found = {i: a for i, a in found.items() if i in playable}
+        if found:
+            break
+    return sorted(found.values(), key=lambda a: -(a["popularity"] or 0))[:n]

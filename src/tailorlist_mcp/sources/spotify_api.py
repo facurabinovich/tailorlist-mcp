@@ -75,6 +75,23 @@ class SpotifyClient:
     def playlist_items(self, playlist_id: str) -> Iterator[dict]:
         return self.paged(f"playlists/{playlist_id}/items", limit=100)
 
+    def tracks(self, track_ids: list[str], market: str | None = None) -> list[dict | None]:
+        """Track objects in the order asked (None where Spotify has nothing). With
+        market="from_token" Spotify relinks: a replaced track comes back as the version it
+        serves now, with the asked ID in linked_from."""
+        out: list[dict | None] = []
+        for i in range(0, len(track_ids), 50):
+            params = {"ids": ",".join(track_ids[i : i + 50])}
+            if market:
+                params["market"] = market
+            out.extend(self.get("tracks", **params).get("tracks") or [])
+        return out
+
+    def search_tracks(self, query: str, limit: int = 5) -> list[dict]:
+        """Track search, every market (market=from_token needs the user-read-private scope; check
+        playability with tracks(ids, market="from_token") instead)."""
+        return [t for t in (self.get("search", q=query, type="track", limit=limit).get("tracks") or {}).get("items") or [] if t]
+
     def artists(self, artist_ids: list[str]) -> list[dict]:
         out: list[dict] = []
         for i in range(0, len(artist_ids), 50):

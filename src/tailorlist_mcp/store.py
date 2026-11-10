@@ -34,7 +34,14 @@ CREATE TABLE IF NOT EXISTS tracks (
     explicit     INTEGER,
     popularity   INTEGER,
     isrc         TEXT,
-    url          TEXT
+    url          TEXT,
+    -- Popularity-0 tracks: the version Spotify plays instead (relinking, GET tracks?market=from_token).
+    relink_checked_at  INTEGER,   -- when Spotify was asked; NULL = not asked yet
+    current_id         TEXT,      -- the version Spotify serves now; NULL = same track or none
+    current_popularity INTEGER,
+    current_album      TEXT,
+    current_url        TEXT,
+    unavailable        INTEGER    -- 1 = not playable in the user's country and no replacement
 );
 CREATE TABLE IF NOT EXISTS track_artists (
     track_id  TEXT NOT NULL,
@@ -86,6 +93,12 @@ _ADDED_COLUMNS = [
     ("artists", "mb_genres", "TEXT"),
     ("artists", "mb_checked_at", "INTEGER"),
     ("artists", "mb_source", "TEXT"),
+    ("tracks", "relink_checked_at", "INTEGER"),
+    ("tracks", "current_id", "TEXT"),
+    ("tracks", "current_popularity", "INTEGER"),
+    ("tracks", "current_album", "TEXT"),
+    ("tracks", "current_url", "TEXT"),
+    ("tracks", "unavailable", "INTEGER"),
 ]
 
 
@@ -134,9 +147,15 @@ def save_playlist(conn: sqlite3.Connection, playlist: dict, rows: list[dict], sk
         )
         for position, row in enumerate(rows):
             t = row["track"]
+            # Upsert, not REPLACE: keeps the relink columns of a track that is still at popularity 0.
             conn.execute(
-                "INSERT OR REPLACE INTO tracks (id, name, album, album_id, release_date, duration_ms, explicit, "
-                "popularity, isrc, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO tracks (id, name, album, album_id, release_date, duration_ms, explicit, "
+                "popularity, isrc, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+                "name = excluded.name, album = excluded.album, album_id = excluded.album_id, "
+                "release_date = excluded.release_date, duration_ms = excluded.duration_ms, "
+                "explicit = excluded.explicit, isrc = excluded.isrc, url = excluded.url, "
+                "relink_checked_at = CASE WHEN excluded.popularity = 0 THEN relink_checked_at END, "
+                "popularity = excluded.popularity",
                 (t["id"], t["name"], t["album"], t["album_id"], t["release_date"], t["duration_ms"],
                  t["explicit"], t["popularity"], t["isrc"], t["url"]),
             )
@@ -172,6 +191,30 @@ def update_followers(conn: sqlite3.Connection, playlist: dict) -> None:
 
 def artists_missing_details(conn: sqlite3.Connection) -> list[str]:
     return [r["id"] for r in conn.execute("SELECT id FROM artists WHERE genres IS NULL")]
+
+
+def tracks_to_relink(conn: sqlite3.Connection) -> list[str]:
+    """Tracks at popularity 0 that Spotify hasn't been asked about yet."""
+    return [r["id"] for r in conn.execute("SELECT id FROM tracks WHERE popularity = 0 AND relink_checked_at IS NULL")]
+
+
+def save_relinks(conn: sqlite3.Connection, results: dict[str, dict | None], now: int) -> None:
+    """Store what Spotify said about popularity-0 tracks.
+
+    results: original track ID -> {"current_id", "current_popularity", "current_album",
+    "current_url", "unavailable"}, or None when Spotify returned nothing for it (left
+    unchecked, asked again on the next load).
+    """
+    with conn:
+        for tid, r in results.items():
+            if r is None:
+                continue
+            conn.execute(
+                "UPDATE tracks SET relink_checked_at = ?, current_id = ?, current_popularity = ?, current_album = ?, "
+                "current_url = ?, unavailable = ? WHERE id = ?",
+                (now, r.get("current_id"), r.get("current_popularity"), r.get("current_album"), r.get("current_url"),
+                 int(bool(r.get("unavailable"))), tid),
+            )
 
 
 def save_artist_details(conn: sqlite3.Connection, artists: list[dict]) -> None:

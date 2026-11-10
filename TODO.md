@@ -10,9 +10,12 @@ Spotify gives popularity 0 to album versions that were replaced by a newer relea
 album (e.g. "One Headlight" from *Bringing Down The Horse*, "Luka" from *Solitude Standing*).
 195 of 2,923 tracks in Facu's collection have popularity 0 (2026-11-09).
 
-Tool idea: list those tracks, find the version Spotify currently serves (same ISRC or same name
-and artist, popularity > 0) and offer to swap them in the playlist (with preview, Phase 3 write
-tools).
+Done 2026-11-10 (read-only part): load_playlists asks Spotify with the user's market, which
+relinks a replaced track to the version it plays now (188 of 195; the other 7 aren't playable
+in Argentina). Stats use the current version's popularity; `find_replaced_tracks` lists both
+kinds, with search alternatives for the unavailable ones.
+
+Left for Phase 3: offer to swap the saved IDs for the current versions (with preview).
 
 ### Original release year (compilations and reissues skew the years)
 

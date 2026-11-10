@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -119,7 +120,43 @@ def load_playlists(
                     store.save_artist_details(conn, artists)
             except SpotifyError as exc:
                 results.append({"status": "warning", "error": f"Artist details not fetched: {exc}"})
+    try:
+        relink_popularity_zero(client, conn)
+    except SpotifyError as exc:
+        results.append({"status": "warning", "error": f"Replaced versions not checked: {exc}"})
     return {"results": results, "collection": overview(conn)}
+
+
+def relink_popularity_zero(client: SpotifyClient, conn: sqlite3.Connection, now: int | None = None) -> int:
+    """Ask Spotify which version it serves now for every popularity-0 track not asked yet.
+
+    Spotify gives popularity 0 to album versions it replaced with a newer release; with the
+    user's market it "relinks" them to the replacement (linked_from holds the saved ID). The
+    replacement's own popularity needs a second, market-less read. Returns how many were asked.
+    """
+    ids = store.tracks_to_relink(conn)
+    if not ids:
+        return 0
+    found: dict[str, dict | None] = {tid: None for tid in ids}
+    for asked, t in zip(ids, client.tracks(ids, market="from_token")):
+        if not t:
+            continue
+        original = (t.get("linked_from") or {}).get("id") or t.get("id")
+        if original != asked:
+            continue
+        if t.get("id") and t["id"] != asked:
+            found[asked] = {"current_id": t["id"]}
+        else:
+            found[asked] = {"unavailable": t.get("is_playable") is False}
+    replacements = sorted({r["current_id"] for r in found.values() if r and r.get("current_id")})
+    details = {t["id"]: t for t in client.tracks(replacements) if t} if replacements else {}
+    for r in found.values():
+        if r and r.get("current_id"):
+            t = details.get(r["current_id"]) or {}
+            r.update(current_popularity=t.get("popularity"), current_album=(t.get("album") or {}).get("name"),
+                     current_url=(t.get("external_urls") or {}).get("spotify"))
+    store.save_relinks(conn, found, now or int(time.time()))
+    return len(ids)
 
 
 def overview(conn: sqlite3.Connection) -> dict:
