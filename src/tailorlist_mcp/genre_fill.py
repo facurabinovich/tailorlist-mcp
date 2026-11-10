@@ -40,7 +40,22 @@ def _owner_alive(owner: str) -> bool:
     return True
 
 
-class GenreFill:
+def _file_of(conn: sqlite3.Connection) -> Path | None:
+    row = conn.execute("PRAGMA database_list").fetchone()
+    return Path(row[2]) if row and row[2] else None
+
+
+class BackgroundFill:
+    """One MusicBrainz job running in a background thread: the shared start/status/lock/resume logic.
+
+    Subclasses say what is pending (_counts, _candidates) and how to handle one row (_process).
+    """
+
+    JOB = ""
+    RETRY_AFTER = RETRY_AFTER
+    SECONDS_PER_ITEM = 2.5
+    WHAT = "items"
+
     def __init__(
         self,
         client_factory: Callable[[], musicbrainz.MusicBrainzClient] = musicbrainz.MusicBrainzClient,
@@ -57,23 +72,38 @@ class GenreFill:
         self.hits = 0
         self.error: str | None = None
 
+    # ---------------------------------------------------------------- what to do (subclasses)
+
+    def _counts(self, conn: sqlite3.Connection, now: int) -> dict:
+        """{"total", "checked", "found", "pending"}."""
+        raise NotImplementedError
+
+    def _candidates(self, conn: sqlite3.Connection, now: int) -> list:
+        raise NotImplementedError
+
+    def _process(self, client, conn: sqlite3.Connection, row, now: int) -> bool:
+        """Look one row up and save the result. True when something was found. Raises MusicBrainzError
+        when MusicBrainz couldn't answer (the row then stays pending)."""
+        raise NotImplementedError
+
+    # ---------------------------------------------------------------- public
+
     @property
     def running_here(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
-    # ---------------------------------------------------------------- public
-
     def start(self, conn: sqlite3.Connection, db_path: Path | None = None) -> dict:
         """Start the background fill unless one is running (here or in another process)."""
-        db_path = db_path or settings.cache_path()
+        # The job opens its own connection: to the same file as conn (never silently the default cache).
+        db_path = db_path or _file_of(conn) or settings.cache_path()
         now = int(self._clock())
-        if not self.running_here and store.mb_counts(conn, now, RETRY_AFTER)["pending"]:
-            if store.acquire_job(conn, JOB, self._owner, now, STALE_AFTER, _owner_alive):
+        if not self.running_here and self._counts(conn, now)["pending"]:
+            if store.acquire_job(conn, self.JOB, self._owner, now, STALE_AFTER, _owner_alive):
                 self.processed = self.hits = 0
                 self.error = None
                 self._stop.clear()
                 if self._run_in_thread:
-                    self._thread = threading.Thread(target=self._run, args=(db_path,), name="genre-fill", daemon=True)
+                    self._thread = threading.Thread(target=self._run, args=(db_path,), name=self.JOB, daemon=True)
                     self._thread.start()
                 else:
                     self._run(db_path)
@@ -81,8 +111,8 @@ class GenreFill:
 
     def status(self, conn: sqlite3.Connection) -> dict:
         now = int(self._clock())
-        counts = store.mb_counts(conn, now, RETRY_AFTER)
-        job = store.job_state(conn, JOB, now, STALE_AFTER)
+        counts = self._counts(conn, now)
+        job = store.job_state(conn, self.JOB, now, STALE_AFTER)
         running = self.running_here or job["running"]
         return {
             **counts,
@@ -91,7 +121,7 @@ class GenreFill:
             "run_processed": self.processed if self.running_here or self.processed else None,
             "run_found": self.hits if self.running_here or self.processed else None,
             "error": self.error or (None if running else job["error"]),
-            "seconds_left": counts["pending"] * 2.5 if running else None,   # about 2-3 requests per artist at 1 per second
+            "seconds_left": counts["pending"] * self.SECONDS_PER_ITEM if running else None,
         }
 
     def stop(self) -> None:
@@ -106,32 +136,47 @@ class GenreFill:
             client = self._client_factory()
             failures = 0
             last_failure = ""
-            for row in store.mb_candidates(conn, int(self._clock()), RETRY_AFTER):
+            for row in self._candidates(conn, int(self._clock())):
                 if self._stop.is_set():
                     break
                 try:
-                    found = client.lookup(row["id"], row["name"])
-                except musicbrainz.MusicBrainzError as exc:   # not saved: the artist stays pending
+                    found = self._process(client, conn, row, int(self._clock()))
+                except musicbrainz.MusicBrainzError as exc:   # not saved: the row stays pending
                     failures += 1
                     last_failure = str(exc)
                     if failures >= _MAX_FAILURES:
-                        error = f"Stopped after {failures} artists in a row failed: {last_failure}"
+                        error = f"Stopped after {failures} {self.WHAT} in a row failed: {last_failure}"
                         break
                     continue
                 failures = 0
-                now = int(self._clock())
-                store.save_mb_result(conn, row["id"], found.genres if found else [], found.source if found else None, now)
                 self.processed += 1
                 self.hits += 1 if found else 0
-                store.job_heartbeat(conn, JOB, self._owner, now)
+                store.job_heartbeat(conn, self.JOB, self._owner, int(self._clock()))
         except Exception as exc:  # never let the thread die silently
             error = f"{type(exc).__name__}: {exc}"
         finally:
             self.error = error
             try:
-                store.release_job(conn, JOB, self._owner, error)
+                store.release_job(conn, self.JOB, self._owner, error)
             finally:
                 conn.close()
+
+
+class GenreFill(BackgroundFill):
+    JOB = JOB
+    WHAT = "artists"
+    SECONDS_PER_ITEM = 2.5          # about 2-3 requests per artist at 1 per second
+
+    def _counts(self, conn, now):
+        return store.mb_counts(conn, now, self.RETRY_AFTER)
+
+    def _candidates(self, conn, now):
+        return store.mb_candidates(conn, now, self.RETRY_AFTER)
+
+    def _process(self, client, conn, row, now):
+        found = client.lookup(row["id"], row["name"])
+        store.save_mb_result(conn, row["id"], found.genres if found else [], found.source if found else None, now)
+        return bool(found)
 
 
 def describe(status: dict) -> str:

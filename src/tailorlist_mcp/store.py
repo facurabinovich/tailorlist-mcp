@@ -85,6 +85,13 @@ CREATE TABLE IF NOT EXISTS drafts (              -- Phase 2b: groupings waiting 
     updated_at INTEGER NOT NULL,
     data       TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS original_years (      -- earliest release of a song (MusicBrainz), one row per (artist, song)
+    artist     TEXT NOT NULL,                   -- primary artist name, casefolded
+    song       TEXT NOT NULL,                   -- the title on letters and digits (musicbrainz.loose_title of the base title)
+    year       INTEGER,                         -- NULL = not found
+    checked_at INTEGER NOT NULL,
+    PRIMARY KEY (artist, song)
+);
 CREATE TABLE IF NOT EXISTS pending_writes (      -- Phase 3: previewed plans waiting for confirm_write (single-use codes)
     code       TEXT PRIMARY KEY,
     created_at INTEGER NOT NULL,

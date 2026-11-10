@@ -15,7 +15,7 @@ import sqlite3
 
 import pandas as pd
 
-from tailorlist_mcp import store
+from tailorlist_mcp import store, years
 from tailorlist_mcp.analysis import comparison
 from tailorlist_mcp.analysis import duplicates as dup
 from tailorlist_mcp.analysis import overview as ov
@@ -35,6 +35,7 @@ def records(conn: sqlite3.Connection) -> list[dict]:
     ):
         artists_by_track.setdefault(r["track_id"], []).append(r)
 
+    known = years.known_years(conn)
     out = []
     for r in conn.execute(
         "SELECT pt.playlist_id, pt.position, pt.added_at, p.name AS playlist_name, t.* "
@@ -57,7 +58,11 @@ def records(conn: sqlite3.Connection) -> list[dict]:
             "popularity": r["current_popularity"]
             if r["popularity"] == 0 and r["current_id"] and r["current_popularity"] is not None else r["popularity"],
             "duration_ms": r["duration_ms"],
-            "release_date": r["release_date"],
+            # The song's original release year (fill_years) when it is earlier than the album's:
+            # compilations and reissues stop skewing years and decades. album_release_date keeps Spotify's.
+            "release_date": (years.original_date(known, r["name"], primary["name"] if primary else "", r["album"],
+                                                 r["release_date"]) or r["release_date"]),
+            "album_release_date": r["release_date"],
             "added_at": r["added_at"],
             # Original app: genres of the primary artist, comma-separated.
             "artist_genres": ", ".join(genres),
@@ -81,6 +86,8 @@ def tracks_frame(recs: list[dict]) -> pd.DataFrame:
     if df.empty:
         return df
     df["release_year"] = parse_release_year(df["release_date"])
+    if "album_release_date" in df.columns:
+        df["album_year"] = parse_release_year(df["album_release_date"])
     df["decade"] = (df["release_year"] // 10 * 10).where(df["release_year"].notna())
     return add_artist_display(df)
 
@@ -197,6 +204,7 @@ def overview_data(conn: sqlite3.Connection, current_year: int | None = None) -> 
         "genres": _rows(ov.top_genres(ov.genre_track_counts(df), 30), {"genre": "genre", "track_count": "tracks"}),
         "untagged": {"tracks": untagged_count, "percent": untagged_pct},
         "musicbrainz": _musicbrainz_info(conn),
+        "original_years": _years_info(conn, deduped),
         "decades": [
             {"decade": int(r["decade"]), "tracks": int(r["count"])}
             for _, r in ov.decade_distribution(deduped).iterrows()
@@ -215,6 +223,16 @@ def overview_data(conn: sqlite3.Connection, current_year: int | None = None) -> 
             )},
         },
     }
+
+
+def _years_info(conn: sqlite3.Connection, deduped: pd.DataFrame) -> dict:
+    """Unique tracks dated by their original release instead of their album, and songs fill_years hasn't checked."""
+    import time
+    moved = 0
+    if "album_year" in deduped.columns:
+        moved = int(((deduped["album_year"] - deduped["release_year"]) > 0).sum())
+    pending = years.FILL._counts(conn, int(time.time()))["pending"]
+    return {"dated_by_original": moved, "pending": pending}
 
 
 def _musicbrainz_info(conn: sqlite3.Connection) -> dict:
@@ -249,6 +267,13 @@ def model_summary(data: dict) -> str:
     if mbz.get("pending"):
         lines.append(f"{mbz['pending']} artists without Spotify genres haven't been looked up: fill_genres can fill them "
                      "from MusicBrainz in the background (it takes a few minutes per hundred artists).")
+    yrs = data.get("original_years") or {}
+    if yrs.get("dated_by_original"):
+        lines.append(f"{yrs['dated_by_original']} tracks are dated by the song's original release instead of their album "
+                     "(compilations, reissues); find_tracks sort=\"year_gap\" lists them.")
+    if yrs.get("pending"):
+        lines.append(f"{yrs['pending']} songs haven't been dated by their original release: fill_years can look them up in "
+                     "MusicBrainz in the background (about 1.6 s per song); until then compilations count with their album's year.")
     lines.append("Decades: " + ", ".join(f"{d['decade']}s {d['tracks']}" for d in data["decades"]) + ".")
     d = data["duplicates"]
     lines.append(

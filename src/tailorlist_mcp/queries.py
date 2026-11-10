@@ -33,7 +33,7 @@ DIMENSIONS = ("decade", "year", "artist", "album", "genre", "genre_family", "pla
 #: Dimensions that read in order (a chart axis), not by size.
 _ORDERED = {"decade", "year", "month_added", "popularity_bin"}
 METRICS = ("unique_tracks", "entries", "hours", "avg_popularity", "share")
-_SORTS = {"popularity": "popularity_raw", "year": "release_year", "added": "_added", "duration": "duration_raw",
+_SORTS = {"popularity": "popularity_raw", "year": "release_year", "year_gap": "_year_gap", "added": "_added", "duration": "duration_raw",
           "name": "_name_key", "artist": "_artist_key"}
 _ASCENDING_BY_DEFAULT = {"name", "artist"}
 
@@ -325,7 +325,13 @@ def find_tracks(
     df, used = apply_filters(conn, _frame(conn), filters)
     if df.empty:
         return f"No tracks match the filters ({'; '.join(used) or 'none'})."
-    df = df.assign(_name_key=df["track_name"].str.casefold(), _artist_key=df["artist_name"].str.casefold())
+    df = df.assign(_name_key=df["track_name"].str.casefold(), _artist_key=df["artist_name"].str.casefold(),
+                   _year_gap=(df["album_year"] - df["release_year"]) if "album_year" in df.columns else float("nan"))
+    if sort == "year_gap":   # only tracks dated earlier than their album, the biggest gap first
+        df = df[df["_year_gap"] > 0]
+        if df.empty:
+            return ("No track is dated earlier than its album yet. fill_years finds each song's original release "
+                    "year in MusicBrainz (offer it to the user).")
     grouped = df.groupby("track_id", sort=False)
     tracks = grouped.first()
     tracks["_playlists"] = grouped["playlist_name"].agg(lambda s: sorted(set(s)))
@@ -335,13 +341,17 @@ def find_tracks(
     tracks = tracks.sort_values(col, ascending=asc, na_position="last", kind="stable")
 
     shown = tracks.head(limit)
-    header = ["#", "Track", "Artist", "Album", "Year", "Duration", "Pop", "Added", "Playlists"] + (["Link"] if include_links else [])
+    gap = "album_year" in shown.columns and bool((shown["album_year"] != shown["release_year"]).fillna(False).any())
+    header = (["#", "Track", "Artist", "Album", "Year"] + (["Album year"] if gap else [])
+              + ["Duration", "Pop", "Added", "Playlists"] + (["Link"] if include_links else []))
     rows = []
     for i, (_, t) in enumerate(shown.iterrows(), start=1):
         pls = t["_playlists"]
         names = ", ".join(pls[:3]) + (f" +{len(pls) - 3}" if len(pls) > 3 else "")
-        row = [i, t["track_name"], t["artist_display"], t["album_name"] or "", _int_or_blank(t["release_year"]),
-               fmt_duration(t["duration_raw"] / 60000) if pd.notna(t["duration_raw"]) else "",
+        row = [i, t["track_name"], t["artist_display"], t["album_name"] or "", _int_or_blank(t["release_year"])]
+        if gap:
+            row.append(_int_or_blank(t["album_year"]) if t["album_year"] != t["release_year"] else "")
+        row += [fmt_duration(t["duration_raw"] / 60000) if pd.notna(t["duration_raw"]) else "",
                _int_or_blank(t["popularity_raw"]), t["_added"].strftime("%Y-%m-%d") if pd.notna(t["_added"]) else "", names]
         if include_links:
             row.append(t["url"] or "")

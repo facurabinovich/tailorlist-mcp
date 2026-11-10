@@ -31,8 +31,11 @@ TERMS: dict[str, tuple[tuple[str, ...], str]] = {
         "release (it plays the new one instead); for those, Tailorlist uses the popularity of the version "
         "Spotify plays now (find_replaced_tracks lists them). \"Avg popularity\" averages unique tracks."),
     "release year": (("year", "decade", "compilation", "reissue"),
-        "Release year: the album's release date, so compilations and reissues count with the album's year, "
-        "not the song's original year."),
+        "Release year: the song's original release year when fill_years found one in MusicBrainz that is EARLIER "
+        "than its album's (\"Hey Jude\" from the compilation \"1\" counts as 1968, not 2000); otherwise the "
+        "album's release date. Live, demo and acoustic takes always keep their album year (they are other "
+        "recordings). find_tracks shows \"Album year\" when the two differ; sort=\"year_gap\" lists those tracks. "
+        "Decades, median era and listening age all use this year."),
     "top decade": (("median era", "era", "listening span", "span"),
         "Top decade: the decade with the most unique tracks. Median era: the median release year of unique "
         "tracks. Listening span: newest minus oldest release year."),

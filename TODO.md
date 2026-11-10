@@ -25,11 +25,44 @@ don't: "Hey Jude", "Day Tripper", "I Feel Fine" saved from *1 (Remastered 2015)*
 **2000**; *Love* as 2006, *Yellow Submarine Songtrack* as 1999, *Past Masters* as 1988. That
 moves the decade chart, the median era and the listening age.
 
-Tool idea: find the original year of each recording (MusicBrainz recording
-`first-release-date`, looked up by ISRC; cache it, ~1 req/s) and:
-- use the original year in the overview stats (show both when they differ),
-- list the tracks whose album year is far from the original ("saved from a compilation"),
-- optionally offer to swap them for the version on the original album (Phase 3).
+Plan agreed 2026-11-10, measured on Facu's library:
+- Looking up by ISRC alone fails where it matters: MusicBrainz files new remasters/remixes as
+  separate recordings, so "Hey Jude - Remastered 2015" gets 2015. Spotify's own search is weak
+  too (Beatles "Super Deluxe" 2026 editions, Dinah Washington missing).
+- MusicBrainz recording search by title (version suffixes and "feat." removed) + primary
+  artist, earliest first-release-date among the matching recordings (titles compared on letters
+  and digits only; recordings marked live/demo/remix/instrumental skipped), ISRC as fallback:
+  Hey Jude 1968, Day Tripper 1965, Baby You're a Rich Man 1967, Rapper's Delight 1979. 25 random
+  tracks: 22 same as the album year, 4 corrected, 1 not found. Some stay late (Dinah Washington
+  1983, really 1959).
+- Safety rule: the original year can only move a track EARLIER than its album year.
+- One lookup per (primary artist, song), cached in its own table; "not found" retried after
+  30 days. ~1.6 s per song at MusicBrainz's 1 request/s: about 80 minutes for 2,923 tracks the
+  first time, in the background like fill_genres.
+- Decisions: (1) one year everywhere: the original when known, else the album's (overview,
+  collection_stats, find_tracks, group_tracks by decade, show_playlist); find_tracks shows
+  "Album year" when it differs and sorts by the gap. (2) Live, demo and acoustic tracks keep
+  their album year (they are other recordings). (3) Swapping a track for the version on the
+  original album: later, after seeing how many tracks come from compilations.
+- Tool: `fill_years()`, background, offered by Claude, started only with the user's OK.
+
+Done 2026-11-10: `fill_years`, years.py, the original year in dashboard.records, `find_tracks`
+"Album year" column and sort "year_gap". Left: swapping tracks for the original album's version.
+
+### Doubtful years: let Claude check them on the web (after a full fill_years run)
+
+Idea from Facu 2026-11-10. MusicBrainz still leaves some songs late (Aaron Neville "Tell It Like
+It Is": 1987, really 1966). Claude (web search in Claude Desktop / claude.ai) could check the
+doubtful ones, a batch of 10-20 at a time, at the user's request, never the whole library:
+- `set_year(track, year, source)`: a manual correction that wins over MusicBrainz, stored with
+  its source (e.g. "1966, Wikipedia"); the user's own corrections go through it too.
+- A way to list the doubtful ones (e.g. a `find_tracks` filter): tracks on compilation-looking
+  albums ("Best Of", "Greatest Hits", "Collection"...) still at their album year or not found,
+  and songs MusicBrainz only answered through the ISRC fallback.
+- Flow: Claude shows "current year -> year per source (link)" and saves with set_year after the
+  user's OK.
+First run fill_years on the whole library and count the doubtful ones: ~30 justifies the flow,
+~5 only needs set_year.
 
 ### Curator role, `start` menu and `explain`
 

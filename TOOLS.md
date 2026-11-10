@@ -38,6 +38,7 @@ dashboards, data tools for everything else).
 | `unload_playlists(playlists)` | (new, asked by Facu) take playlists out of the local cache and the drafts; Spotify untouched; shows the overview of what remains | ✅ |
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
 | `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | ✅ |
+| `fill_years()` | (new, from the backlog) each song's original release year from MusicBrainz, so compilations and reissues stop skewing years and decades; background, ~1.6 s per song, cached | ✅ |
 | `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
 
 ### Dashboards (fixed views)
@@ -87,7 +88,7 @@ charts), plus audio sections in `show_playlist`.
 | Tool | What |
 |---|---|
 | `find_replaced_tracks` ✅ / `replace_versions` ✅ | popularity-0 album versions and their current version, offer to swap |
-| `original_years` | original release year (MusicBrainz by ISRC), compilations flagged, stats on original years |
+| `fill_years` ✅ | original release year (MusicBrainz title + artist search, ISRC fallback), used by every stat; `find_tracks(sort="year_gap")` lists tracks saved from compilations. Swapping them for the original album's version: later |
 | `sequence_tracks(curve)` | order a playlist by an energy/tempo curve (planned for the archived agent) |
 
 ## Phase 2a check: every non-audio section of the original, and what covers it

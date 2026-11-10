@@ -16,7 +16,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, progress, queries, settings, store, write
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, progress, years, queries, settings, store, write
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -36,7 +36,8 @@ after one opens, add a short comment and suggest what to look at next — don't 
 numbers. For questions use the data tools (collection_stats, find_tracks, find_duplicates,
 compare_playlists, find_replaced_tracks) and chart the small tables yourself. Never browse
 Spotify's website or read the cache file. When a term needs explaining, call explain(term).
-Many artists lack genres: offer fill_genres, but only start it with their OK.
+Many artists lack genres: offer fill_genres; compilations and reissues date songs by the album:
+offer fill_years. Start either only with their OK.
 
 Curate: group_tracks (preview_only first to show counts) -> the draft opens -> review it
 together -> edit_draft until they're happy. Suggest a playlist name for each group (e.g.
@@ -116,6 +117,17 @@ def _genres_hint(conn) -> str:
             "MusicBrainz in the background (a few minutes per hundred artists); offer it to the user, don't start it unasked.")
 
 
+def _years_hint(conn) -> str:
+    """One line for load_playlists when songs haven't been dated by their original release."""
+    import time
+    pending = years.FILL._counts(conn, int(time.time()))["pending"]
+    if not pending:
+        return ""
+    minutes = max(1, round(pending * years.YearFill.SECONDS_PER_ITEM / 60))
+    return (f"\n{pending} songs aren't dated by their original release yet (compilations and reissues count with the album's "
+            f"year). fill_years can look them up in MusicBrainz in the background (about {minutes} min); offer it, don't start it unasked.")
+
+
 # ---------------------------------------------------------------- dashboard tools (MCP Apps)
 
 apps = Apps()
@@ -161,7 +173,7 @@ async def load_playlists(playlists: list[str], ctx: Context, force: bool = False
         with closing(store.connect()) as conn:
             loaded = collection.load_playlists(client, conn, playlists, force=force, progress=progress)
             data = dashboard.overview_data(conn)
-            hint = _genres_hint(conn)
+            hint = _genres_hint(conn) + _years_hint(conn)
         data["load"] = loaded["results"]
         lines = []
         for r in loaded["results"]:
@@ -386,6 +398,7 @@ Clean it up
  • Duplicates and the same song saved in different versions
  • Old album versions Spotify replaced, and tracks that no longer play
  • Fill missing genres (MusicBrainz)
+ • Date songs by their original release, not the compilation's (MusicBrainz)
 
 Build better playlists
  • Group your tracks by decade, genre family or specific genres into drafts
@@ -514,7 +527,8 @@ def find_tracks(
     Args:
         filters: playlists, artist, album, genre (exact tag), genre_family, decade, year_from/to,
             popularity_min/max, added_from/to, duration_min/max (minutes), text (in the name).
-        sort: popularity, year, added, duration, name or artist. Default order is descending
+        sort: popularity, year, year_gap (tracks dated earlier than their album, e.g. saved from a
+            compilation, biggest gap first; needs fill_years), added, duration, name or artist. Default order is descending
             (ascending for name and artist) unless `ascending` says otherwise.
         limit: rows to return (default 50, max 500).
         include_links: add each track's Spotify link (longer output).
@@ -759,6 +773,25 @@ def fill_genres() -> str:
         if not conn.execute("SELECT 1 FROM artists LIMIT 1").fetchone():
             raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
         return genre_fill.describe(genre_fill.FILL.start(conn))
+
+
+@mcp.tool()
+def fill_years() -> str:
+    """Date each song by its original release instead of its album, using MusicBrainz (free, about
+    1 request per second): "Hey Jude" saved from the compilation "1" counts as 1968, not 2000.
+
+    Runs in the background and returns at once; call it again to see progress (it never starts a
+    second run). One lookup per artist and song, the most-saved first; results are saved as they
+    arrive, so every other tool (overview, stats, find_tracks, group_tracks by decade) uses them
+    right away, and a stopped run resumes. A year only ever moves a track EARLIER than its album;
+    live, demo and acoustic takes keep their album year. About 1.6 s per song (a library of 3,000
+    tracks takes over an hour the first time). Start it only if the user agrees.
+    """
+    with closing(store.connect()) as conn:
+        if not conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone():
+            raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
+        status = years.FILL.start(conn)
+        return years.describe(status, years.moved_tracks(conn))
 
 
 @mcp.tool()

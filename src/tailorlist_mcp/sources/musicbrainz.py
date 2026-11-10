@@ -16,8 +16,10 @@ genre stays without one.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -146,6 +148,28 @@ class MusicBrainzClient:
         doc = self._get(f"artist/{mbid}", inc="genres") or {}
         return _names(doc.get("genres"), _MAX_GENRES)
 
+    # ---------------------------------------------------------------- original release years
+
+    def first_release_year(self, title: str, artist: str, isrc: str | None = None) -> int | None:
+        """Year of the earliest release of a song by this artist, or None.
+
+        Recording search by title and artist; the matching recordings (same title on letters and
+        digits, the artist among the credited names, not marked live/demo/remix/instrumental/karaoke)
+        give their first-release-date and the earliest wins. ISRC only as a fallback: MusicBrainz files
+        new remasters and remixes as separate recordings, so the ISRC alone often gives the remaster's
+        year. The caller keeps the album year when it is earlier.
+        """
+        key, who = loose_title(title), artist.strip().casefold()
+        if not key or not who:
+            return None
+        doc = self._get("recording", query=f'recording:"{_lucene_escape(title)}" AND artist:"{_lucene_escape(artist)}"',
+                        limit=100)
+        years = [y for rec in (doc or {}).get("recordings") or [] if (y := _year_of(rec, key, who)) is not None]
+        if not years and isrc:
+            doc = self._get(f"isrc/{isrc}")
+            years = [y for rec in (doc or {}).get("recordings") or [] if (y := _year(rec.get("first-release-date")))]
+        return min(years) if years else None
+
     def lookup(self, spotify_id: str, name: str) -> Found | None:
         """Genres for one artist, or None when MusicBrainz has no trustworthy match or no genres."""
         source = "url"
@@ -167,6 +191,35 @@ def _names(items: list[dict] | None, limit: int) -> list[str]:
         if tag and tag not in seen:
             seen.append(tag)
     return seen[:limit]
+
+
+_SKIP_RECORDINGS = ("live", "demo", "remix", "instrumental", "karaoke")
+
+
+def loose_title(title: str) -> str:
+    """A title on letters and digits only: "Baby, You’re a Rich Man" == "Baby You're A Rich Man"."""
+    text = unicodedata.normalize("NFKD", str(title).casefold())
+    return re.sub(r"[\W_]+", "", "".join(c for c in text if not unicodedata.combining(c)))
+
+
+def _year(date: str | None) -> int | None:
+    try:
+        year = int((date or "")[:4])
+    except ValueError:
+        return None
+    return year if year > 1900 else None
+
+
+def _year_of(rec: dict, key: str, artist: str) -> int | None:
+    if loose_title(rec.get("title") or "") != key:
+        return None
+    names = {(c.get("name") or "").strip().casefold() for c in rec.get("artist-credit") or []} | {
+        ((c.get("artist") or {}).get("name") or "").strip().casefold() for c in rec.get("artist-credit") or []}
+    if artist not in names:
+        return None
+    if any(w in (rec.get("disambiguation") or "").casefold() for w in _SKIP_RECORDINGS):
+        return None
+    return _year(rec.get("first-release-date"))
 
 
 def _lucene_escape(text: str) -> str:

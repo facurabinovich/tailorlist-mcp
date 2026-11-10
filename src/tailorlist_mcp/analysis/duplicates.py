@@ -62,6 +62,30 @@ def strip_version_suffix(name: str) -> str:
         name = m.group("base").strip()
 
 
+_OTHER_PERFORMANCE = re.compile(r"\b(live|en vivo|unplugged|demo|acoustic|ac[uú]stic[oa])\b", re.IGNORECASE)
+_FEAT = re.compile(r"\s*[(\[](?:feat|ft|featuring|with)\.?\s[^()\[\]]*[)\]]\s*$", re.IGNORECASE)
+
+
+def other_performance(name: str, album: str | None = None) -> bool:
+    """A live, demo or acoustic take: its version suffix (or its album's name) says so.
+
+    "Heart of Gold - Live" and any track of "MTV Unplugged" are; "Live and Let Die" isn't."""
+    name = str(name)
+    suffix = name[len(strip_version_suffix(name)):]
+    return bool(_OTHER_PERFORMANCE.search(suffix)) or bool(album and re.search(
+        r"\b(live|en vivo|unplugged|in concert)\b", album, re.IGNORECASE))
+
+
+def base_title(name: str) -> str:
+    """The song title to look up: version suffixes and a trailing "(feat. X)" removed."""
+    name = strip_version_suffix(name)
+    while True:
+        cut = _FEAT.sub("", name).strip()
+        if cut == name or not cut:
+            return name
+        name = strip_version_suffix(cut)
+
+
 def song_key(name: str) -> str:
     """Comparison key for different versions: strip_version_suffix, case-folded."""
     return strip_version_suffix(name).casefold()
