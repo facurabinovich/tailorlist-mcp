@@ -64,11 +64,84 @@ Estimate for 5,000 tracks: about 900 lookups, ~15 minutes the first time.
 2. **Analysis.** (2a done 2026-11-09: `fill_genres`, `collection_stats`, `find_tracks`, `find_duplicates`, `compare_playlists`, `show_playlist`, metric definitions in the instructions; 2b done 2026-11-09: `group_tracks` (category and genres modes), `show_draft`, `edit_draft`, `organize_progress`, `reset_progress`; KMeans waits for phase 4.) Genre families (Spotify + MusicBrainz), duplicates, playlist comparison,
    `cluster` (by genre family, by category, KMeans). Tool shapes from the archived
    `agent/tools.py` of the Streamlit app.
-3. **Write.** `create_playlist(name, track_ids)`, `add_tracks`, `remove_tracks`, with preview.
+3. **Write.** Create and edit playlists, always previewed and confirmed. Detailed plan below
+   (agreed with Facu 2026-11-10).
 4. **Audio features.** ReccoBeats, Audio DNA.
 5. **Launch.** README with the Spotify app walkthrough, `uvx` install, Claude Desktop
    extension if feasible, 2-minute demo video, post. README states the Spotify AI-clause
    risk.
+
+## Phase 3 plan: writing to Spotify (agreed 2026-11-10)
+
+The original app exported each group through Spotlistr (pages/_Cluster_Results.py: name
+`"<group> — <date>"`, "Artist - Song" text or URLs, then a separate "mark these tracks as done"
+confirmation). Here the MCP writes the playlists itself. The current scopes
+(`playlist-modify-public`, `playlist-modify-private`) are enough: no new login.
+
+### Safety rules (every write tool)
+
+1. **Two steps with a code.** The first call writes nothing: it returns a preview (playlist,
+   tracks, changes, visibility) and a confirmation code. Only a second call with
+   `confirm="<code>"` writes, and it writes exactly the previewed plan. Codes are single-use and
+   expire after 30 minutes. Pending plans live in a `pending_writes` table.
+2. **Abort if the playlist changed** on Spotify between preview and confirmation (`snapshot_id`).
+3. **Never delete playlists.** Only playlists the user owns (or collaborative ones) are edited.
+4. **Re-read after writing:** the touched playlists are reloaded, so cache and dashboards agree.
+5. **Write log** (`writes` table): what was done, where, the positions and the snapshot after
+   the write. It feeds the undo.
+
+### Decisions
+
+- **Visibility:** Claude asks the user before the preview; the preview states it plainly;
+  private when nobody said otherwise.
+- **Names:** Claude suggests a name for each new playlist (e.g. "Rock de los 80" for the group
+  "1980s · Rock"); the preview shows it and the user approves or changes it. The group name is the
+  fallback. The date and the origin go in the description, not the name: "Made with Tailorlist on
+  2026-11-10 from Alt7, People7" (Spotify caps descriptions at 300 characters). If a playlist with
+  that name already exists in the account, the preview warns and proposes "<name> (2)".
+- **Done marking:** automatic once a draft group is written (`drafts.mark_group_written`),
+  except groups flagged keep_visible. The preview says so.
+- **Replaced and unavailable tracks in new playlists:** the user decides each time. When a group
+  holds replaced album versions (see `find_replaced_tracks`), the preview stops and lists them in
+  two blocks, "same album" and "other album" (saved album vs. current album; 101 vs. 87 of 188 in
+  Facu's library), and Claude asks: all current, keep the saved ones, or current except some.
+  Claude recommends "all current" and says why: it is the version Spotify actually plays, its
+  stats (popularity) are up to date, and it is often a newer remaster. Tracks not playable in the
+  user's country are listed the same way (keep or leave out). The tool has no default: without a
+  choice it returns no confirmation code, so the final preview always includes the choice.
+- **Removing a track that is in a playlist twice** removes every copy (Spotify API); accepted,
+  the preview says so.
+- **Undo now:** `undo_last_write` reverts the last add, remove or replace. Not for created
+  playlists (undoing would mean deleting). Tracks put back show today's added date (Spotify
+  limitation). Refused if the playlist changed after that write.
+
+### Tools
+
+| Tool | What |
+|---|---|
+| `create_playlist(name, tracks or draft+group, description?, public?)` | new playlist with exact tracks, in order |
+| `write_draft(draft, groups?, names?, public?)` | one playlist per draft group, all in one preview; marks the tracks done |
+| `add_tracks(playlist, tracks, position?)` | add to an existing playlist; tracks already in it are skipped |
+| `remove_tracks(playlist, tracks)` | take tracks out of a playlist |
+| `replace_versions(playlist?)` | swap the replaced album versions (see `find_replaced_tracks`) for the current version, same position; their added date becomes today |
+| `undo_last_write()` | revert the last add, remove or replace (two steps, like the rest) |
+| `export_tracks(draft+group or playlist, format)` | "Artist - Song" text (Spotlistr), track URLs or CSV; writes nothing |
+
+### Steps
+
+1. Spotify write client (create, add with position, remove; batches of 100), `pending_writes`
+   and `writes` tables, the preview/confirm mechanism. Check on `test-tailorlist` that adding at
+   a position and the remove body behave as in step 0.
+2. `create_playlist` and `write_draft`, with names, description, visibility, collision check and
+   done marking.
+3. `add_tracks` and `remove_tracks`.
+4. `replace_versions`.
+5. `undo_last_write`.
+6. `export_tracks`.
+7. Server instructions, TOOLS.md, this plan.
+
+Verification: tests with a fake client; a real run on `test-tailorlist` (create, add, remove,
+replace, undo) and writing a real two-group draft.
 
 ## Terms and licences (checked 2026-11-09)
 
