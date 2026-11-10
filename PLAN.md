@@ -80,15 +80,25 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
 
 ### Safety rules (every write tool)
 
-1. **Two steps with a code.** The first call writes nothing: it returns a preview (playlist,
-   tracks, changes, visibility) and a confirmation code. Only a second call with
-   `confirm="<code>"` writes, and it writes exactly the previewed plan. Codes are single-use and
-   expire after 30 minutes. Pending plans live in a `pending_writes` table.
-2. **Abort if the playlist changed** on Spotify between preview and confirmation (`snapshot_id`).
-3. **Never delete playlists.** Only playlists the user owns (or collaborative ones) are edited.
-4. **Re-read after writing:** the touched playlists are reloaded, so cache and dashboards agree.
-5. **Write log** (`writes` table): what was done, where, the positions and the snapshot after
-   the write. It feeds the undo.
+1. **Two steps with a code, confirmed by a separate tool.** The write tools only preview: they
+   write nothing and return the preview (playlist, tracks, changes, visibility) and a
+   confirmation code. Only `confirm_write(code)` writes, and it writes exactly the previewed
+   plan. Codes are single-use and expire after 30 minutes; pending plans live in a
+   `pending_writes` table. The code proves a preview existed, not that the user agreed: the
+   preview tools can be "always allowed" in Claude Code / Desktop while `confirm_write` stays
+   on "ask every time", so the host itself stops before every write (the README says so).
+2. **Abort if anything changed** between preview and confirmation: the playlist on Spotify
+   (`snapshot_id`) or, for draft groups, the draft (`updated_at`, e.g. an `edit_draft` after the
+   preview). The user gets a new preview.
+3. **Edit previews read Spotify live,** not the cache: removing and replacing need the real
+   positions and the current snapshot.
+4. **Never delete playlists.** Only playlists the user owns (or collaborative ones) are edited.
+5. **Re-read after writing:** the touched playlists are reloaded, so cache and dashboards agree.
+6. **Write log** (`writes` table): what was done, where, the positions and the snapshot after
+   the write, recorded batch by batch (Spotify takes 100 tracks per call). It feeds the undo.
+7. **Partial failures are reported exactly:** if a batch or a group fails, the result says what
+   was written and what wasn't (e.g. "groups 1-2 created and marked done; group 3 has 100 of 300
+   tracks; groups 4-5 not written"); the rest is picked up with a new preview.
 
 ### Decisions
 
@@ -99,8 +109,9 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
   fallback. The date and the origin go in the description, not the name: "Made with Tailorlist on
   2026-11-10 from Alt7, People7" (Spotify caps descriptions at 300 characters). If a playlist with
   that name already exists in the account, the preview warns and proposes "<name> (2)".
-- **Done marking:** automatic once a draft group is written (`drafts.mark_group_written`),
-  except groups flagged keep_visible. The preview says so.
+- **Done marking:** automatic once a draft group is written (by `write_draft` or
+  `create_playlist` from a group), except groups flagged keep_visible. Exactly the tracks written
+  are marked, not whatever the draft holds by then. The preview says so.
 - **Replaced and unavailable tracks in new playlists:** the user decides each time. When a group
   holds replaced album versions (see `find_replaced_tracks`), the preview stops and lists them in
   two blocks, "same album" and "other album" (saved album vs. current album; 101 vs. 87 of 188 in
@@ -111,9 +122,11 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
   choice it returns no confirmation code, so the final preview always includes the choice.
 - **Removing a track that is in a playlist twice** removes every copy (Spotify API); accepted,
   the preview says so.
-- **Undo now:** `undo_last_write` reverts the last add, remove or replace. Not for created
-  playlists (undoing would mean deleting). Tracks put back show today's added date (Spotify
-  limitation). Refused if the playlist changed after that write.
+- **Undo now:** `undo_last_write` reverts the last add, remove or replace. One write = one
+  confirmed operation, even when it touches several playlists (`replace_versions` on the whole
+  library is undone as a whole). Not for created playlists (undoing would mean deleting); an undo
+  can't itself be undone. Tracks put back show today's added date (Spotify limitation). Refused
+  if a playlist changed after that write.
 
 ### Tools
 
@@ -124,24 +137,27 @@ confirmation). Here the MCP writes the playlists itself. The current scopes
 | `add_tracks(playlist, tracks, position?)` | add to an existing playlist; tracks already in it are skipped |
 | `remove_tracks(playlist, tracks)` | take tracks out of a playlist |
 | `replace_versions(playlist?)` | swap the replaced album versions (see `find_replaced_tracks`) for the current version, same position; their added date becomes today |
-| `undo_last_write()` | revert the last add, remove or replace (two steps, like the rest) |
+| `undo_last_write()` | preview reverting the last add, remove or replace |
+| `confirm_write(code)` | the only tool that writes: carries out a previewed plan |
 | `export_tracks(draft+group or playlist, format)` | "Artist - Song" text (Spotlistr), track URLs or CSV; writes nothing |
 
 ### Steps
 
 1. Spotify write client (create, add with position, remove; batches of 100), `pending_writes`
-   and `writes` tables, the preview/confirm mechanism. Check on `test-tailorlist` that adding at
-   a position and the remove body behave as in step 0.
+   and `writes` tables, `confirm_write` and the preview/confirm mechanism. Check on
+   `test-tailorlist` that adding at a position and the remove body behave as in step 0, and that
+   `public: false` really creates a private playlist.
 2. `create_playlist` and `write_draft`, with names, description, visibility, collision check and
    done marking.
 3. `add_tracks` and `remove_tracks`.
 4. `replace_versions`.
 5. `undo_last_write`.
 6. `export_tracks`.
-7. Server instructions, TOOLS.md, this plan.
+7. Server instructions (the "(a later phase) write" line goes), TOOLS.md, this plan.
 
 Verification: tests with a fake client; a real run on `test-tailorlist` (create, add, remove,
-replace, undo) and writing a real two-group draft.
+replace, undo) and writing a real two-group draft. That creates two real playlists in Facu's
+account, which he deletes by hand afterwards (the MCP never deletes).
 
 ## Terms and licences (checked 2026-11-09)
 

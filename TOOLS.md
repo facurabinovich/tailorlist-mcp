@@ -70,6 +70,7 @@ dashboards, data tools for everything else).
 | `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | 3 |
 | `replace_versions(playlist?)` | (new, from the backlog) swap replaced album versions for the current version, same position | 3 |
 | `undo_last_write()` | (new) revert the last add, remove or replace | 3 |
+| `confirm_write(code)` | (new) the only tool that writes: carries out a previewed plan; keep it on "ask every time" | 3 |
 | `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | 3 |
 
 ### Audio (Phase 4)
@@ -142,6 +143,6 @@ Mode (Alt7: 5, JC: 19).
    - **2b ✅.** `group_tracks` (category and genre modes), `show_draft`, `edit_draft`,
      `organize_progress` / `reset_progress`.
 3. Write: `create_playlist`, `write_draft`, `add_tracks`, `remove_tracks`, `replace_versions`,
-   `undo_last_write`, `export_tracks` (plan in [PLAN.md](PLAN.md)).
+   `undo_last_write`, `confirm_write`, `export_tracks` (plan in [PLAN.md](PLAN.md)).
 4. Audio: `fetch_audio_features`, KMeans mode, audio metrics in the data tools and dashboards.
 5. Launch.
