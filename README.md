@@ -60,3 +60,4 @@ The analysis code (`src/tailorlist_mcp/analysis/`) is ported from the Tailorlist
 ## License
 
 MIT
+[![M8ven Score](https://m8ven.ai/badge/mcp/facurabinovich-tailorlist-mcp-1v786t?v=3fc03b8f62e25d56ee89a00fd80e8434)](https://m8ven.ai/mcp/facurabinovich-tailorlist-mcp-1v786t?s=readme)
