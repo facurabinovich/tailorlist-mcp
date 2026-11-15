@@ -413,6 +413,9 @@ def playlist_data(conn: sqlite3.Connection, ref: str, track_limit: int | None = 
 
     genres = pd_core.top_genres(pl_df, TOP_GENRES_N).sort_values("count", ascending=False)
     monthly = pd_core.monthly_additions(pl_df)
+    if len(monthly):
+        # pandas 2 keeps the tracks without an added date as a month called "NaT" (pandas 3 drops them).
+        monthly = monthly[monthly["period"] != "NaT"]
     growth: dict = {"single_session": None, "timeline": [], "peak": None, "months": len(monthly)}
     if len(monthly) <= 1:
         growth["single_session"] = pd_core.single_session_date(pl_df)
