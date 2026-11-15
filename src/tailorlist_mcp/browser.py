@@ -44,35 +44,53 @@ def _is_wsl() -> bool:
         return False
 
 
-def _open_command(path: Path) -> list[str] | None:
+def _open_command(target: str, is_path: bool = True) -> list[str] | None:
     if sys.platform == "darwin":
-        return ["open", str(path)]
+        return ["open", target]
     if sys.platform.startswith("linux") and _is_wsl():
-        win = subprocess.run(["wslpath", "-w", str(path)], capture_output=True, text=True).stdout.strip()
+        if is_path:
+            win = subprocess.run(["wslpath", "-w", target], capture_output=True, text=True).stdout.strip()
+        else:
+            win = target
         if win and shutil.which("cmd.exe"):
             return ["cmd.exe", "/c", "start", '""', win]
         if shutil.which("wslview"):
-            return ["wslview", str(path)]
+            return ["wslview", target]
     if sys.platform.startswith("linux") and shutil.which("xdg-open"):
-        return ["xdg-open", str(path)]
+        return ["xdg-open", target]
     return None
 
 
-def open_in_browser(path: Path) -> bool:
-    """Open the page in the default browser. Returns False when it couldn't (or is disabled)."""
-    if os.environ.get("TAILORLIST_OPEN_BROWSER", "1").strip().lower() in ("0", "false", "no"):
-        return False
+def _open_disabled() -> bool:
+    return os.environ.get("TAILORLIST_OPEN_BROWSER", "1").strip().lower() in ("0", "false", "no")
+
+
+def _launch(target: str, is_path: bool, cwd: str) -> bool:
     try:
         if platform.system() == "Windows":
-            os.startfile(str(path))  # type: ignore[attr-defined]  # noqa: S606
+            os.startfile(target)  # type: ignore[attr-defined]  # noqa: S606
             return True
-        cmd = _open_command(path)
+        cmd = _open_command(target, is_path)
         if not cmd:
             return False
         subprocess.Popen(
             cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            cwd=str(path.parent) if not _is_wsl() else "/mnt/c", start_new_session=True,
+            cwd=cwd if not _is_wsl() else "/mnt/c", start_new_session=True,
         )
         return True
     except OSError:
         return False
+
+
+def open_in_browser(path: Path) -> bool:
+    """Open the page in the default browser. Returns False when it couldn't (or is disabled)."""
+    if _open_disabled():
+        return False
+    return _launch(str(path), True, str(path.parent))
+
+
+def open_url(url: str) -> bool:
+    """Open an http(s) URL in the default browser (same rules as open_in_browser)."""
+    if _open_disabled() or not url.startswith(("http://", "https://")):
+        return False
+    return _launch(url, False, str(settings.data_dir()))

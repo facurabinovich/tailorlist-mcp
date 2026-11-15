@@ -65,10 +65,7 @@ already ported and not wired to any tool).
      top artists, MusicBrainz genres and years, decades, drafts, text export. No popularity,
      replaced versions or writing. Every result ends with one line saying what connecting adds.
      To check first: the real fields of the Spotify export (Facu's own export).
-  2. Connected: everything. Make the registration painless: `connect_spotify` without a
-     configured app opens a local setup page (exact steps, copy buttons for the redirect URI, a
-     box to paste the Client ID that saves it: no file editing) and returns the same steps as
-     text; it says up front that Premium is needed.
+  2. Connected: everything. The guided setup is done (see Done).
   Also: one registered user can add up to 5 people to their app (README, "use a friend's app").
 
 - **Release**: version is 0.0.1 with no tags or changelog; `uvx` install needs a PyPI release.
@@ -126,6 +123,17 @@ Plan:
 4. Navidrome third, if there is interest.
 
 ## Done
+
+### Guided setup (2026-11-15)
+
+`connect_spotify` without a configured app starts a local setup page on the redirect URI's port
+(`setup_guide.py`, `sources/spotify_setup.py`, `ui/setup.html`): the steps, a copy button for the
+redirect URI, a box for the Client ID that saves it to `.env` and goes straight to the Spotify
+login on the same server. The tool returns the same steps as text for Claude to walk the user
+through, and takes the Client ID from the chat too (`connect_spotify(client_id=...)`);
+`tailorlist-mcp setup` does it from a terminal. Checked: 30 tests, the page served and opened
+from a temporary home. Not checked yet: a full first-time pass against Spotify (paste a new
+Client ID, approve, land back on the page), and how the page looks.
 
 ### Visual analysis, layers 1-3 (2026-11-15)
 

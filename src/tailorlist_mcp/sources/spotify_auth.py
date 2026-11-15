@@ -244,3 +244,10 @@ def start_login() -> LoginSession:
         session.start()
         _current = session
         return session
+
+
+def set_current_login(session: LoginSession) -> None:
+    """Make `session` the pending login (used when another server receives the redirect)."""
+    global _current
+    with _current_lock:
+        _current = session

@@ -1,5 +1,6 @@
-"""The MCP server (stdio). Run `tailorlist-mcp` for the server, `tailorlist-mcp login` to log in
-from a terminal, `tailorlist-mcp logout` to forget the login and the cache.
+"""The MCP server (stdio). Run `tailorlist-mcp` for the server, `tailorlist-mcp setup` for the
+guided Spotify app setup, `tailorlist-mcp login` to log in from a terminal, `tailorlist-mcp logout`
+to forget the login and the cache.
 """
 from __future__ import annotations
 
@@ -16,8 +17,8 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, health, progress, years, queries, settings, store, write
-from tailorlist_mcp.sources import spotify_auth
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, health, progress, years, queries, settings, setup_guide, store, write
+from tailorlist_mcp.sources import spotify_auth, spotify_setup
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
 INSTRUCTIONS = """\
@@ -420,17 +421,50 @@ def start() -> str:
     return START_PROMPT
 
 
+def _setup_text(setup_url: str | None, page_opened: bool) -> str:
+    """What connect_spotify returns when the Spotify app isn't registered yet."""
+    intro = "The user has to register a free Spotify app once (about 3 minutes, needs Spotify Premium). "
+    if setup_url and page_opened:
+        intro += "The setup page was opened in their browser."
+    elif setup_url:
+        intro += f"The setup page couldn't be opened automatically; ask them to open {setup_url}"
+    else:
+        intro += "The setup page couldn't be started (its port is busy), so the Client ID has to be given in the chat."
+    closing = (
+        "For you: walk the user through the steps one at a time in their language, without skipping or "
+        "shortening any. When they have the Client ID, "
+        + ("they can paste it in the page or tell it to you" if setup_url else "ask them to tell it to you")
+        + "; if they tell it to you, call connect_spotify(client_id=...). After they approve access in Spotify, "
+        "call connect_spotify() again to confirm."
+    )
+    return f"{intro}\n\n{setup_guide.as_text(settings.redirect_uri())}\n\n{closing}"
+
+
 @mcp.tool()
-def connect_spotify() -> str:
+def connect_spotify(client_id: str | None = None) -> str:
     """Connect Tailorlist to the user's Spotify account (only needed once).
 
-    Returns who is connected, or a login link the user has to open in their browser.
-    After they approve access, call this again to confirm.
+    Returns who is connected, or a login link the user has to open in their browser. After
+    they approve access, call this again to confirm. If the user hasn't registered their own
+    Spotify app yet, it opens a setup page and returns the steps to walk them through; when
+    they give you the Client ID, call this again with client_id.
     """
+    if client_id is not None:
+        valid = setup_guide.valid_client_id(client_id)
+        if valid is None:
+            raise ToolError(
+                "A Client ID is 32 letters and digits. It is in the Spotify app's Settings at "
+                "https://developer.spotify.com/dashboard."
+            )
+        settings.save_client_id(valid)
     try:
         settings.spotify_app()
-    except settings.NotConfigured as exc:
-        raise ToolError(str(exc)) from exc
+    except settings.NotConfigured:
+        try:
+            setup = spotify_setup.start_setup()
+        except RuntimeError:
+            return _setup_text(None, False)
+        return _setup_text(setup.url, browser.open_url(setup.url))
     try:
         spotify_auth.access_token()
         me = SpotifyClient().me()
@@ -440,7 +474,9 @@ def connect_spotify() -> str:
     except SpotifyError as exc:
         raise ToolError(str(exc)) from exc
     try:
-        session = spotify_auth.start_login()
+        setup = spotify_setup.pending()
+        # The setup server already owns the redirect port: let it serve the login too.
+        session = setup.begin_login() if setup else spotify_auth.start_login()
     except RuntimeError as exc:
         raise ToolError(str(exc)) from exc
     # No webbrowser.open here: a browser launched from this process would inherit stdout,
@@ -914,8 +950,41 @@ def _login_cli() -> int:
     return 0
 
 
+def _setup_cli() -> int:
+    try:
+        settings.spotify_app()
+    except settings.NotConfigured:
+        pass
+    else:
+        print("Tailorlist already has a Spotify app configured. Run `tailorlist-mcp login` to log in.")
+        return 0
+    print(setup_guide.as_text(settings.redirect_uri()), flush=True)
+    try:
+        setup = spotify_setup.start_setup()
+    except RuntimeError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if browser.open_url(setup.url):
+        print(f"\nThe setup page was opened in your browser: {setup.url}", flush=True)
+    else:
+        print(f"\nOpen the setup page in your browser: {setup.url}", flush=True)
+    if not setup.wait(timeout=1800):
+        print("Timed out waiting for the setup.", file=sys.stderr)
+        setup.stop()
+        return 1
+    login = setup.login
+    if login is None or login.error or not login.done.is_set():
+        print((login.error if login else None) or "The setup didn't finish.", file=sys.stderr)
+        return 1
+    me = SpotifyClient().me()
+    print(f"Connected as {me.get('display_name') or me.get('id')}. Token saved in {settings.token_path()}")
+    return 0
+
+
 def main() -> None:
     args = sys.argv[1:]
+    if args[:1] == ["setup"]:
+        sys.exit(_setup_cli())
     if args[:1] == ["login"]:
         sys.exit(_login_cli())
     if args[:1] == ["logout"]:

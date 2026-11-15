@@ -30,14 +30,20 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
 
 ## Setup (for now, from source)
 
-1. Create an app at <https://developer.spotify.com/dashboard> (needs Spotify Premium). Add
-   `http://127.0.0.1:8888/callback` as a Redirect URI and tick "Web API".
-2. Install: `uv venv && uv pip install -e .`
-3. Put your app's Client ID in `~/.tailorlist-mcp/.env` (see `.env.example`). No client
-   secret needed.
-4. Log in once: `.venv/bin/tailorlist-mcp login` (or ask Claude to call `connect_spotify`).
-5. Add it to Claude Code: `claude mcp add -s user tailorlist -- /path/to/.venv/bin/tailorlist-mcp`.
+1. Install: `uv venv && uv pip install -e .`
+2. Add it to Claude Code: `claude mcp add -s user tailorlist -- /path/to/.venv/bin/tailorlist-mcp`.
    For Claude Desktop, add it under `mcpServers` in `claude_desktop_config.json`.
+3. Ask Claude to connect to Spotify (or run `.venv/bin/tailorlist-mcp setup` in a terminal). The
+   first time, a setup page opens in your browser and walks you through registering your own
+   Spotify app (free, about 3 minutes, the account needs Spotify Premium): create the app at
+   <https://developer.spotify.com/dashboard>, add `http://127.0.0.1:8888/callback` as its
+   Redirect URI, tick "Web API", and paste the app's Client ID in the page. No client secret
+   and no file to edit. Then approve access in Spotify.
+
+The Client ID is saved in `~/.tailorlist-mcp/.env`; you can also set `SPOTIFY_CLIENT_ID` (and
+`SPOTIFY_REDIRECT_URI`) in the MCP server config, see `.env.example`. An app in Development
+Mode allows up to 5 people: someone who already has an app can add you under its "User
+Management", and then you only need their Client ID.
 
 ## Tools
 

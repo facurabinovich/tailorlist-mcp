@@ -49,6 +49,33 @@ def _read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def _setting(key: str) -> str:
+    return (os.environ.get(key) or _read_env_file(data_dir() / ".env").get(key) or "").strip()
+
+
+def redirect_uri() -> str:
+    """The configured redirect URI (it doesn't need a Client ID)."""
+    return _setting("SPOTIFY_REDIRECT_URI") or DEFAULT_REDIRECT_URI
+
+
+def save_client_id(client_id: str) -> None:
+    """Write SPOTIFY_CLIENT_ID to <data dir>/.env, keeping every other line."""
+    path = data_dir() / ".env"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    new = f"SPOTIFY_CLIENT_ID={client_id}"
+    for i, line in enumerate(lines):
+        if line.strip().partition("=")[0].strip() == "SPOTIFY_CLIENT_ID" and "=" in line and not line.lstrip().startswith("#"):
+            lines[i] = new
+            break
+    else:
+        lines.append(new)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
 @dataclass(frozen=True)
 class SpotifyApp:
     client_id: str

@@ -32,7 +32,7 @@ dashboards, data tools for everything else).
 
 | Tool | Replaces in the original | Phase |
 |---|---|---|
-| `connect_spotify` | (new: the app used its own Spotify app) | ✅ |
+| `connect_spotify(client_id?)` | (new: the app used its own Spotify app) login with the user's own Spotify app. Without an app configured it opens a local setup page (the steps, the redirect URI to copy, a box for the Client ID) and returns the same steps for Claude to walk the user through; the Client ID can also be given in the chat | ✅ |
 | `list_my_playlists` | Home: add playlists by URL. Liked Songs comes first, as the pseudo-playlist `liked` (new) | ✅ |
 | `load_playlists(playlists, force)` | Home: review + load; opens the overview. `"liked"` loads Liked Songs (read-only: the write tools refuse it; it can feed new playlists) | ✅ |
 | `unload_playlists(playlists)` | (new, asked by Facu) take playlists out of the local cache and the drafts; Spotify untouched; shows the overview of what remains | ✅ |
