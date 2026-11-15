@@ -154,6 +154,17 @@ def _label(by: str, genres_mode: bool, also_by_decade: bool) -> str:
             "both": "by category: genre family × decade"}[by]
 
 
+def draft_label(d: dict) -> str:
+    """The label of a saved draft. Merge and split drafts carry a "source" key; older drafts have none."""
+    src = d.get("source") or {}
+    if d["mode"] == "merge":
+        return "Merge of " + " + ".join(src.get("playlists") or ["playlists"])
+    if src.get("kind") == "split":
+        by = {"decade": "decade", "genre_family": "genre family", "both": "genre family and decade"}.get(d["by"], d["by"])
+        return f"Split of {src['playlist']} by {by}"
+    return _label(d["by"], d["mode"] == "genres", d["also_by_decade"])
+
+
 def group(pool: pd.DataFrame, mode: str, by: str = "both", genres: list[str] | None = None,
           also_by_decade: bool = False) -> tuple[dict[str, list[str]], list[dict]]:
     """Run the ported grouping. Returns ({group name: [track_id]}, unmatched entries).
@@ -230,7 +241,8 @@ def preview_text(counts: dict, groups: dict, unmatched: list[dict], label: str) 
 # ---------------------------------------------------------------- persistence
 
 def new_draft(conn: sqlite3.Connection, mode: str, by: str, genres: list[str] | None, also_by_decade: bool,
-              counts: dict, groups: dict[str, list[str]], unmatched: list[dict], include_done: bool) -> dict:
+              counts: dict, groups: dict[str, list[str]], unmatched: list[dict], include_done: bool,
+              source: dict | None = None) -> dict:
     now = int(time.time())
     seq = (conn.execute("SELECT COALESCE(MAX(seq), 0) FROM drafts").fetchone()[0]) + 1
     d = {
@@ -239,6 +251,8 @@ def new_draft(conn: sqlite3.Connection, mode: str, by: str, genres: list[str] | 
         "groups": [{"name": n, "tracks": ids, "keep_visible": False} for n, ids in groups.items()],
         "unmatched": unmatched, "skipped": [], "assigned": [],
     }
+    if source:
+        d["source"] = source        # merge: {"kind": "merge", "playlists": [...]}; split: {"kind": "split", "playlist": name}
     with conn:
         conn.execute("INSERT INTO drafts (id, seq, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?)",
                      (d["id"], seq, now, now, json.dumps(d)))
@@ -279,7 +293,7 @@ def list_drafts(conn: sqlite3.Connection) -> list[dict]:
     out = []
     for r in conn.execute("SELECT data FROM drafts ORDER BY seq DESC"):
         d = json.loads(r["data"])
-        out.append({"id": d["id"], "created": d["created"], "label": _label(d["by"], d["mode"] == "genres", d["also_by_decade"]),
+        out.append({"id": d["id"], "created": d["created"], "label": draft_label(d),
                     "groups": len(d["groups"]), "tracks": len({t for g in d["groups"] for t in g["tracks"]}),
                     "unmatched": len(d["unmatched"])})
     return out
@@ -380,7 +394,7 @@ def draft_data(conn: sqlite3.Connection, d: dict, full: bool = False) -> dict:
     skipped = [t for t in d["skipped"] if t in info.index]
     drafts = list_drafts(conn)
     return {
-        "id": d["id"], "created": d["created"], "label": _label(d["by"], d["mode"] == "genres", d["also_by_decade"]),
+        "id": d["id"], "created": d["created"], "label": draft_label(d),
         "mode": d["mode"], "by": d["by"], "genres": d["genres"], "also_by_decade": d["also_by_decade"],
         "pool": d["pool"],
         "totals": {"groups": len(cards), "grouped": len(grouped), "unmatched": len([e for e in missing if e["id"] in info.index]),
@@ -452,8 +466,8 @@ def summary(data: dict, max_groups: int = 25) -> str:
     if others:
         lines.append("Other drafts: " + "; ".join(f"{x['id']} ({x['label']}, {x['groups']} groups, {x['tracks']} tracks)" for x in others[:5]) + ".")
     lines.append("Show the user this draft and get their OK before anything is written; change it with edit_draft "
-                 "(rename, move, assign, drop_group, merge, keep_visible, skip_unmatched). Writing playlists to Spotify "
-                 "isn't available yet. Don't paste this list back as text: the dashboard has it.")
+                 "(rename, move, assign, drop_group, merge, keep_visible, skip_unmatched). write_draft previews the "
+                 "playlists to create. Don't paste this list back as text: the dashboard has it.")
     return "\n".join(lines)
 
 

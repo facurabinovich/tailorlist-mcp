@@ -151,24 +151,33 @@ class MusicBrainzClient:
     # ---------------------------------------------------------------- original release years
 
     def first_release_year(self, title: str, artist: str, isrc: str | None = None) -> int | None:
-        """Year of the earliest release of a song by this artist, or None.
+        """Year of the earliest release of a song by this artist, or None (see first_release)."""
+        return self.first_release(title, artist, isrc)[0]
 
-        Recording search by title and artist; the matching recordings (same title on letters and
-        digits, the artist among the credited names, not marked live/demo/remix/instrumental/karaoke)
-        give their first-release-date and the earliest wins. ISRC only as a fallback: MusicBrainz files
-        new remasters and remixes as separate recordings, so the ISRC alone often gives the remaster's
-        year. The caller keeps the album year when it is earlier.
+    def first_release(self, title: str, artist: str, isrc: str | None = None) -> tuple[int | None, str | None]:
+        """(year, path) of the earliest release of a song by this artist; (None, None) when not found.
+
+        Recording search by title and artist ("search"); the matching recordings (same title on letters
+        and digits, the artist among the credited names, not marked live/demo/remix/instrumental/karaoke)
+        give their first-release-date and the earliest wins. ISRC only as a fallback ("isrc"):
+        MusicBrainz files new remasters and remixes as separate recordings, so the ISRC alone often
+        gives the remaster's year, which is why the path is reported. The caller keeps the album year
+        when it is earlier.
         """
         key, who = loose_title(title), artist.strip().casefold()
         if not key or not who:
-            return None
+            return None, None
         doc = self._get("recording", query=f'recording:"{_lucene_escape(title)}" AND artist:"{_lucene_escape(artist)}"',
                         limit=100)
         years = [y for rec in (doc or {}).get("recordings") or [] if (y := _year_of(rec, key, who)) is not None]
-        if not years and isrc:
+        if years:
+            return min(years), "search"
+        if isrc:
             doc = self._get(f"isrc/{isrc}")
             years = [y for rec in (doc or {}).get("recordings") or [] if (y := _year(rec.get("first-release-date")))]
-        return min(years) if years else None
+            if years:
+                return min(years), "isrc"
+        return None, None
 
     def lookup(self, spotify_id: str, name: str) -> Found | None:
         """Genres for one artist, or None when MusicBrainz has no trustworthy match or no genres."""

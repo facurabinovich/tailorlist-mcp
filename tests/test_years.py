@@ -70,11 +70,15 @@ class FakeMB:
     def __init__(self, answers, fail=()):
         self.answers, self.fail, self.asked = answers, set(fail), []
 
-    def first_release_year(self, title, artist, isrc=None):
+    def first_release(self, title, artist, isrc=None):      # the fill asks for the path too
         self.asked.append((title, artist))
         if title in self.fail:
             raise MusicBrainzError("503")
-        return self.answers.get(title)
+        year = self.answers.get(title)
+        return (year, "search") if year else (None, None)
+
+    def first_release_year(self, title, artist, isrc=None):
+        return self.first_release(title, artist, isrc)[0]
 
 
 def _fill(fake):

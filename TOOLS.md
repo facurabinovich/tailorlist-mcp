@@ -39,6 +39,8 @@ dashboards, data tools for everything else).
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
 | `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | ✅ |
 | `fill_years()` | (new, from the backlog) each song's original release year from MusicBrainz, so compilations and reissues stop skewing years and decades; background, ~1.6 s per song, cached | ✅ |
+| `set_year(track, year, source?, artist?)` | (new, from the backlog) a manual year that wins over MusicBrainz and the album year, stored with its source; per song, or per recording for live, demo and acoustic takes. `year=None` removes it | ✅ |
+| `set_genre(artist, genres, source?)` | (new) manual genres for an artist; they win over Spotify's and MusicBrainz's. An empty list removes them | ✅ |
 | `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
 
 ### Dashboards (fixed views)
@@ -55,8 +57,10 @@ dashboards, data tools for everything else).
 |---|---|---|
 | `get_playlist_tracks(playlist)` | every track of a playlist, in order (Playlist Detail "All Tracks") | ✅ |
 | `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | ✅ |
-| `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
+| `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name, doubtful year (compilation albums still at the album year, or years found only by ISRC); sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
 | `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
+| `find_orphans(playlists?, limit?)` | (new) Liked Songs that are in no loaded playlist, each with the playlist of the user's that fits best by genre family and decade, or "no clear fit" | ✅ |
+| `what_can_i_do()` | (new) the menu of everything Tailorlist does (the same text as the `start` prompt, from `menu.py`) plus up to 3 suggestions computed from the cache | ✅ |
 | `library_health(playlists?)` | (new) one offline report of what is off: exact duplicates inside and across playlists, different versions, replaced and unplayable tracks, skipped items, artists without genres, songs not dated yet, doubtful compilation years (heuristic on the album title), near-identical playlists (80% of the smaller, at least 10 tracks); each with the tool that goes deeper | ✅ |
 | `find_replaced_tracks(playlists?)` | tracks with popularity 0: album versions Spotify replaced (with the version it plays now, from relinking) and tracks not playable in the user's country (with alternatives from search). Stats use the current version's popularity. Not in the original app | ✅ |
 | `explain(term)` | (the original's Glossary page) metric definitions, read when the user asks what a number means; moved out of the server instructions, which Claude Code truncated | ✅ |
@@ -67,6 +71,8 @@ dashboards, data tools for everything else).
 | Tool | Replaces | Phase |
 |---|---|---|
 | `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | ✅ (KMeans ⏳4) |
+| `merge_playlists(playlists, name?)` | (new) a draft with one group: the union of 2 or more playlists, each track once; reports the songs present in several versions | ✅ |
+| `split_playlist(playlist, by?, preview_only?)` | (new) a draft that splits one playlist by decade, genre family or both; the playlist stays untouched | ✅ |
 | `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | ✅ |
 | `organize_progress()` / `reset_progress()` | My Clusters progress: tracks already placed in a playlist you built are "done", leave the pool for the next grouping, and count toward a % of the library organized (the 100 % banner). Reset starts over | ✅ (`write_draft` / `create_playlist` from a group mark exactly the written tracks done) |
 | `create_playlist(name, tracks or draft group, description)` | export to Spotify (the app used Spotlistr); always previews and asks first; Claude suggests the name | ✅ |

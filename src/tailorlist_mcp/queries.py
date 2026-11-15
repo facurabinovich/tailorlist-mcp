@@ -18,7 +18,7 @@ import sqlite3
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
-from tailorlist_mcp import charts, dashboard
+from tailorlist_mcp import charts, dashboard, years
 from tailorlist_mcp.analysis import comparison
 from tailorlist_mcp.analysis.duplicates import song_key
 from tailorlist_mcp.analysis import overview as ov
@@ -62,6 +62,8 @@ class Filters(BaseModel):
     duration_min: float | None = Field(None, description="Shortest track, in minutes.")
     duration_max: float | None = Field(None, description="Longest track, in minutes.")
     text: str | None = Field(None, description="Text in the track name.")
+    doubtful_year: bool | None = Field(None, description="Only tracks whose year is doubtful: compilation albums still at the album year, "
+                                       "or years MusicBrainz only found by ISRC. Check them on the web and fix with set_year.")
 
 
 # ---------------------------------------------------------------- frame and filters
@@ -152,7 +154,16 @@ def apply_filters(conn: sqlite3.Connection, df: pd.DataFrame, f: Filters | None)
     if f.text:
         mask &= df["track_name"].fillna("").str.casefold().str.contains(f.text.strip().casefold(), regex=False)
         used.append(f"text='{f.text}'")
+    if f.doubtful_year:
+        mask &= _doubts(df).notna()
+        used.append("doubtful_year")
     return df[mask], used
+
+
+def _doubts(df: pd.DataFrame) -> pd.Series:
+    """Per row, why its year is doubtful (years.doubtful_reason), or None."""
+    return pd.Series([years.doubtful_reason(n, a, s) for n, a, s in zip(df["track_name"], df["album_name"], df["year_source"])],
+                     index=df.index, dtype=object)
 
 
 def _limit(limit: int | None) -> int:
@@ -346,10 +357,13 @@ def find_tracks(
 
     shown = tracks.head(limit)
     gap = "album_year" in shown.columns and bool((shown["album_year"] != shown["release_year"]).fillna(False).any())
+    doubtful = bool(filters and filters.doubtful_year)   # Claude needs the album and the ID to search the web and call set_year
     header = (["#", "Track", "Artist", "Album", "Year"] + (["Album year"] if gap else [])
-              + ["Duration", "Pop", "Added", "Playlists"] + (["Link"] if include_links else []))
+              + ["Duration", "Pop", "Added", "Playlists"] + (["Why", "Track ID"] if doubtful else [])
+              + (["Link"] if include_links else []))
+    whys = _doubts(shown) if doubtful else None
     rows = []
-    for i, (_, t) in enumerate(shown.iterrows(), start=1):
+    for i, (tid, t) in enumerate(shown.iterrows(), start=1):
         pls = t["_playlists"]
         names = ", ".join(pls[:3]) + (f" +{len(pls) - 3}" if len(pls) > 3 else "")
         row = [i, t["track_name"], t["artist_display"], t["album_name"] or "", _int_or_blank(t["release_year"])]
@@ -357,6 +371,8 @@ def find_tracks(
             row.append(_int_or_blank(t["album_year"]) if t["album_year"] != t["release_year"] else "")
         row += [fmt_duration(t["duration_raw"] / 60000) if pd.notna(t["duration_raw"]) else "",
                _int_or_blank(t["popularity_raw"]), t["_added"].strftime("%Y-%m-%d") if pd.notna(t["_added"]) else "", names]
+        if doubtful:
+            row += [whys[tid], tid]
         if include_links:
             row.append(t["url"] or "")
         rows.append(row)

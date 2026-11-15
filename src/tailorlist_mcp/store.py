@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     current_popularity INTEGER,
     current_album      TEXT,
     current_url        TEXT,
-    unavailable        INTEGER    -- 1 = not playable in the user's country and no replacement
+    unavailable        INTEGER,   -- 1 = not playable in the user's country and no replacement
+    manual_year        INTEGER,   -- set_year on a live/demo/acoustic take: the year of this recording only
+    manual_year_note   TEXT       -- free text: where it came from
 );
 CREATE TABLE IF NOT EXISTS track_artists (
     track_id  TEXT NOT NULL,
@@ -56,7 +58,9 @@ CREATE TABLE IF NOT EXISTS artists (
     popularity INTEGER,
     mb_genres     TEXT,       -- JSON list from MusicBrainz (only looked up when Spotify has none); NULL = not checked
     mb_checked_at INTEGER,    -- when MusicBrainz was last asked (also set when it found nothing)
-    mb_source     TEXT        -- how the MusicBrainz artist was found: 'url' (Spotify link) or 'search' (exact name)
+    mb_source     TEXT,       -- how the MusicBrainz artist was found: 'url' (Spotify link) or 'search' (exact name)
+    manual_genres TEXT,       -- JSON list set with set_genre; wins over Spotify's and MusicBrainz's
+    manual_source TEXT        -- free text: where the manual genres came from
 );
 CREATE TABLE IF NOT EXISTS playlist_tracks (
     playlist_id TEXT NOT NULL,
@@ -90,6 +94,8 @@ CREATE TABLE IF NOT EXISTS original_years (      -- earliest release of a song (
     song       TEXT NOT NULL,                   -- the title on letters and digits (musicbrainz.loose_title of the base title)
     year       INTEGER,                         -- NULL = not found
     checked_at INTEGER NOT NULL,
+    source     TEXT,                            -- 'search' (title+artist search), 'isrc' (only the ISRC fallback), 'manual' (set_year); NULL = before this was recorded
+    note       TEXT,                            -- manual rows: free text, where the correction came from
     PRIMARY KEY (artist, song)
 );
 CREATE TABLE IF NOT EXISTS pending_writes (      -- Phase 3: previewed plans waiting for confirm_write (single-use codes)
@@ -120,12 +126,18 @@ _ADDED_COLUMNS = [
     ("artists", "mb_genres", "TEXT"),
     ("artists", "mb_checked_at", "INTEGER"),
     ("artists", "mb_source", "TEXT"),
+    ("artists", "manual_genres", "TEXT"),
+    ("artists", "manual_source", "TEXT"),
+    ("original_years", "source", "TEXT"),
+    ("original_years", "note", "TEXT"),
     ("tracks", "relink_checked_at", "INTEGER"),
     ("tracks", "current_id", "TEXT"),
     ("tracks", "current_popularity", "INTEGER"),
     ("tracks", "current_album", "TEXT"),
     ("tracks", "current_url", "TEXT"),
     ("tracks", "unavailable", "INTEGER"),
+    ("tracks", "manual_year", "INTEGER"),
+    ("tracks", "manual_year_note", "TEXT"),
 ]
 
 
@@ -263,9 +275,34 @@ def save_artist_details(conn: sqlite3.Connection, artists: list[dict]) -> None:
 
 # Primary artists whose Spotify genres came back empty: the only ones MusicBrainz is asked about
 # (genres are read from the primary artist only; see dashboard.records).
+# An artist with manual genres (set_genre) is not one of them: nothing to look up.
 _NO_SPOTIFY_GENRES = (
-    "a.genres = '[]' AND a.id IN (SELECT artist_id FROM track_artists WHERE position = 0)"
+    "a.genres = '[]' AND (a.manual_genres IS NULL OR a.manual_genres = '[]') "
+    "AND a.id IN (SELECT artist_id FROM track_artists WHERE position = 0)"
 )
+
+
+def _tags(raw: str | None) -> list[str]:
+    try:
+        value = json.loads(raw) if raw else []
+    except ValueError:
+        return []
+    return [str(t) for t in value] if isinstance(value, list) else []
+
+
+def genres_with_source(spotify: str | None, musicbrainz: str | None, manual: str | None) -> tuple[list[str], str | None]:
+    """The genres to use for an artist and where they come from: manual > Spotify > MusicBrainz.
+
+    Takes the raw JSON of the three columns. The one place this precedence lives."""
+    for raw, source in ((manual, "manual"), (spotify, "Spotify"), (musicbrainz, "MusicBrainz")):
+        tags = _tags(raw)
+        if tags:
+            return tags, source
+    return [], None
+
+
+def effective_genres(spotify: str | None, musicbrainz: str | None, manual: str | None) -> list[str]:
+    return genres_with_source(spotify, musicbrainz, manual)[0]
 
 
 def mb_candidates(conn: sqlite3.Connection, now: int, retry_after: int) -> list[sqlite3.Row]:

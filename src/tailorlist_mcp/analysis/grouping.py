@@ -97,7 +97,8 @@ def group_by_category(
             parts.append(row["_decade_group"])
         return " · ".join(parts) if parts else "Ungrouped"
 
-    df["cluster_name"] = df.apply(_build_name, axis=1)
+    # apply() on an empty frame returns a frame, not a Series (every track was unmatched)
+    df["cluster_name"] = df.apply(_build_name, axis=1) if len(df) else pd.Series(dtype=object)
     unique_names = sorted(df["cluster_name"].unique())
     name_to_idx = {n: i for i, n in enumerate(unique_names)}
     df["cluster"] = df["cluster_name"].map(name_to_idx)

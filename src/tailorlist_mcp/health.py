@@ -6,7 +6,6 @@ Cache only: no Spotify or MusicBrainz call.
 """
 from __future__ import annotations
 
-import re
 import sqlite3
 import time
 
@@ -17,11 +16,7 @@ from tailorlist_mcp.analysis import comparison, duplicates
 from tailorlist_mcp.queries import QueryError, shared_pairs
 
 EXAMPLES = 5
-#: Album titles that look like compilations (matched case-insensitively): their year is often the reissue's.
-COMPILATION_PATTERN = re.compile(
-    r"best of|greatest hits|the hits|collection|anthology|essential|compilation|very best|ultimate",
-    re.IGNORECASE,
-)
+COMPILATION_PATTERN = years.COMPILATION_PATTERN      # lives in years now: the shared definition of a doubtful year
 NEAR_IDENTICAL_SHARE = 0.8
 NEAR_IDENTICAL_MIN_TRACKS = 10
 
@@ -97,13 +92,16 @@ def years_not_dated(conn: sqlite3.Connection) -> tuple[int, list[str]]:
 
 
 def doubtful_years(recs: list[dict]) -> tuple[int, list[str]]:
-    """Compilation-looking albums whose tracks still carry the album's own year."""
-    seen: dict[str, dict] = {}
+    """Tracks whose year is doubtful (years.doubtful_reason): compilation albums still at the album's
+    year, and years MusicBrainz only found by ISRC."""
+    seen: dict[str, tuple[dict, str]] = {}
     for r in recs:
-        if r["album"] and COMPILATION_PATTERN.search(r["album"]) and r["release_date"] == r["album_release_date"]:
-            seen.setdefault(r["id"], r)
-    rows = sorted(seen.values(), key=lambda r: (r["artists"], r["name"]))
-    return len(rows), _first(f"{r['name']} - {r['artists']} ({r['album']}, {str(r['release_date'] or '')[:4]})" for r in rows)
+        why = years.doubtful_reason(r["name"], r["album"], r.get("year_source"))
+        if why:
+            seen.setdefault(r["id"], (r, why))
+    rows = sorted(seen.values(), key=lambda x: (x[0]["artists"], x[0]["name"]))
+    return len(rows), _first(f"{r['name']} - {r['artists']} ({r['album']}, {str(r['release_date'] or '')[:4]}"
+                             f"{', ISRC only' if why == 'ISRC only' else ''})" for r, why in rows)
 
 
 def near_identical_playlists(recs: list[dict]) -> tuple[int, list[str]]:
@@ -161,8 +159,9 @@ def library_health(conn: sqlite3.Connection, playlists: list[str] | None = None)
         ("artists with no genres found", f"Artists without genres, looked up and nothing found{wide}",
          genres_not_found(conn), ""),
         ("songs undated by original release", f"Songs not dated by original release yet{wide}", years_not_dated(conn), "fill_years"),
-        ("doubtful compilation years", "Doubtful years (heuristic: the album title looks like a compilation and the song "
-         "still has the album's year)", doubtful_years(recs), 'find_tracks(filters={"album": ...})'),
+        ("doubtful years", "Doubtful years (heuristic: the album title looks like a compilation and the song still has "
+         "the album's year, or MusicBrainz only found the year by ISRC)", doubtful_years(recs),
+         'find_tracks(filters={"doubtful_year": true}), then check them on the web and fix with set_year'),
     ]
     if len(names) >= 2:
         checks.append(("near-identical playlists", f"Near-identical playlists (shared tracks are at least "

@@ -17,7 +17,8 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, health, progress, years, queries, settings, setup_guide, store, write
+from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, drafts, export, genre_fill, glossary,
+                            health, menu, merge_split, orphans, progress, years, queries, settings, setup_guide, store, write)
 from tailorlist_mcp.sources import spotify_auth, spotify_setup
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -29,8 +30,7 @@ clerk, but the library is theirs: suggest, never decide. Talk in the user's lang
 
 Start: if they aren't connected, call connect_spotify and give them the link. Then
 list_my_playlists and ask which playlists to load; never pick them yourself or load all
-unless told. If they don't know where to begin, offer the menu (the `start` prompt) as a
-short list.
+unless told. If they don't know where to begin, call what_can_i_do and show it as a short list.
 
 Analyze: dashboards (show_overview, show_playlist, show_draft) open in the user's browser;
 after one opens, add a short comment and suggest what to look at next — don't repeat its
@@ -383,36 +383,55 @@ def edit_draft(draft: str, changes: list[drafts.Change]) -> CallToolResult:
         return _draft_result(conn, d, intro=intro, open_browser=False)
 
 
+@apps.tool(resource_uri=DRAFT_URI)
+def merge_playlists(playlists: list[str], name: str | None = None) -> CallToolResult:
+    """Merge 2 or more loaded playlists (Liked Songs too) into a draft with one group, and open the draft.
+
+    The group holds every track once, in the order the playlists were given. Tracks already organized
+    are included. Only a draft is made: nothing is written to Spotify and the playlists aren't touched;
+    write_draft creates the new playlist.
+
+    Args:
+        playlists: the playlists to merge (names, unique parts of a name, IDs or links).
+        name: name of the merged group. Default: the playlist names joined with " + ".
+    """
+    with closing(store.connect()) as conn:
+        try:
+            d, text = merge_split.merge_playlists(conn, playlists, name)
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError) as exc:
+            raise ToolError(str(exc)) from exc
+        return _draft_result(conn, d, intro=text)
+
+
+@apps.tool(resource_uri=DRAFT_URI)
+def split_playlist(playlist: str, by: str = "decade", preview_only: bool = False) -> CallToolResult:
+    """Split one loaded playlist (Liked Songs too) into a draft of groups by decade and/or genre family.
+
+    Like group_tracks in category mode, limited to that playlist, with tracks already organized
+    included. Only a draft is made: the playlist isn't touched and nothing is written to Spotify;
+    write_draft creates one new playlist per group.
+
+    Args:
+        playlist: the playlist (name, unique part of a name, ID or link).
+        by: "decade", "genre_family" or "both". Tracks without a genre or a release decade (when that
+            dimension is used) are listed as unmatched, with the reason.
+        preview_only: don't save a draft; return the counts.
+    """
+    with closing(store.connect()) as conn:
+        try:
+            d, text, preview = merge_split.split_playlist(conn, playlist, by, preview_only)
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError) as exc:
+            raise ToolError(str(exc)) from exc
+        if d is None:
+            return CallToolResult(content=[TextContent(type="text", text=text)], structured_content={"preview": preview})
+        return _draft_result(conn, d, intro=text)
+
+
 mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__, extensions=[apps])
 
 
 
-START_PROMPT = """\
-Introduce yourself in one line as the user's music curator for their Spotify library, then
-offer what you can do as a short list they can pick from:
-
-Understand your collection
- • Overview of everything: decades, genres, artists, popularity, how it grew
- • Deep dive into one playlist
- • Compare playlists: overlap, era, diversity
- • Ask anything: "my most-saved artists", "80s tracks under 3 minutes"...
-
-Clean it up
- • Health check: everything that is off, in one report
- • Duplicates and the same song saved in different versions
- • Old album versions Spotify replaced, and tracks that no longer play
- • Fill missing genres (MusicBrainz)
- • Date songs by their original release, not the compilation's (MusicBrainz)
-
-Build better playlists
- • Group your tracks by decade, genre family or specific genres into drafts
- • Review and tweak the drafts together, then save them to Spotify
- • Add, remove, sort or de-duplicate tracks in existing playlists (always previewed, undoable)
- • Track how much of your library is already organized
-
-If no playlists are loaded yet, say that the first step is choosing which ones to load,
-and offer to list them.
-"""
+START_PROMPT = menu.start_prompt()
 
 
 @mcp.prompt(name="start", title="Start with Tailorlist",
@@ -592,6 +611,19 @@ def find_duplicates(playlists: list[str] | None = None, kind: str = "all", limit
 
 
 @mcp.tool()
+def find_orphans(playlists: list[str] | None = None, limit: int = queries.DEFAULT_LIMIT) -> str:
+    """Liked Songs that are in no loaded playlist (exact Spotify ID), each with the playlist that
+    fits it best by genre family and decade, or "no clear fit". Needs Liked Songs loaded
+    (load_playlists(["liked"])). Only loaded playlists count. Reads the cache only.
+
+    Args:
+        playlists: names, IDs or links of the playlists to suggest among; default all loaded ones of the user's.
+        limit: rows in the listing (default 50, max 500).
+    """
+    return _answer(orphans.find_orphans, playlists, limit)
+
+
+@mcp.tool()
 def library_health(playlists: list[str] | None = None) -> str:
     """One report of what is off in the loaded playlists (or only the ones given): duplicates
     inside and across playlists, different versions, replaced or unplayable tracks, skipped
@@ -617,6 +649,16 @@ def explain(term: str = "") -> str:
             empty for the list of terms.
     """
     return glossary.explain(term)
+
+
+@mcp.tool()
+def what_can_i_do() -> str:
+    """The menu of everything Tailorlist does, plus suggestions computed from the user's library.
+    Call it when the user asks what Tailorlist can do, doesn't know where to begin, or at a
+    natural pause after finishing a task. Reads the cache only.
+    """
+    with closing(store.connect()) as conn:
+        return menu.what_can_i_do(conn)
 
 
 @mcp.tool()
@@ -881,6 +923,49 @@ def fill_years() -> str:
             raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
         status = years.FILL.start(conn)
         return years.describe(status, years.moved_tracks(conn))
+
+
+@mcp.tool()
+def set_year(track: str, year: int | None, source: str = "", artist: str | None = None) -> str:
+    """Correct the year of one song after checking it on the web (MusicBrainz still gets some wrong).
+
+    Only after the user's OK: first show "current year -> proposed year (source link)". Work in a batch
+    of 10-20 songs at a time, at the user's request, never the whole library. The year is saved for the
+    song (every saved version of it), wins over MusicBrainz and over the album year (earlier or later),
+    and fill_years never overwrites it. year=0 or null removes the correction. Live, demo and acoustic
+    takes get their own year for that recording only. find_tracks(filters={"doubtful_year": true}) lists the likely wrong ones.
+
+    Args:
+        track: a Spotify track ID, URI or link of a track in the cache, or a track name (several songs
+            with that name is an error listing them).
+        year: the year the song was first released (1860 to next year); 0 or null to remove.
+        source: where you found it, short ("Wikipedia", "user").
+        artist: with a track name, narrows the match.
+    """
+    with closing(store.connect()) as conn:
+        try:
+            return corrections.set_year(conn, track, year, source, artist)
+        except queries.QueryError as exc:
+            raise ToolError(str(exc)) from exc
+
+
+@mcp.tool()
+def set_genre(artist: str, genres: list[str], source: str = "") -> str:
+    """Set an artist's genres by hand; they win over Spotify's and MusicBrainz's everywhere (stats,
+    filters, groupings) and fill_genres skips the artist. Only after the user's OK. Tags are lower-cased;
+    the result says which genre family the first tag falls in, so tell the user when a tag has none
+    ("Other"). An empty list removes the correction.
+
+    Args:
+        artist: an artist name in the cache (exact, else a unique part of it) or a Spotify artist ID or link.
+        genres: the genre tags, e.g. ["indie rock", "dream pop"]; [] to remove.
+        source: where the genres come from, short ("Wikipedia", "user").
+    """
+    with closing(store.connect()) as conn:
+        try:
+            return corrections.set_genre(conn, artist, genres, source)
+        except queries.QueryError as exc:
+            raise ToolError(str(exc)) from exc
 
 
 @mcp.tool()

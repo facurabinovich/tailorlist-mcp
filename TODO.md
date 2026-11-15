@@ -14,25 +14,13 @@ Nothing running.
 
 ## Next
 
-- **`merge_playlists` / `split_playlist`**: merge several playlists without duplicates, or split
-  a big one by a criterion. Built on drafts and `write_draft`.
-- **Orphan tracks.** Liked Songs that are in no playlist, with a suggested playlist for each by
-  genre and decade. Needs Liked Songs.
 - **Run `fill_years` on the whole library** (about 75 minutes, 112 of 2,811 songs dated on
   2026-11-10) and count the doubtful years: that decides the next item.
-- **Doubtful years: let Claude check them on the web.** Idea from Facu 2026-11-10. MusicBrainz
-  still leaves some songs late (Aaron Neville "Tell It Like It Is": 1987, really 1966). Claude
-  (web search in Claude Desktop / claude.ai) could check the doubtful ones, a batch of 10-20 at a
-  time, at the user's request, never the whole library:
-  - `set_year(track, year, source)`: a manual correction that wins over MusicBrainz, stored with
-    its source (e.g. "1966, Wikipedia"); the user's own corrections go through it too.
-  - A way to list the doubtful ones (e.g. a `find_tracks` filter): tracks on compilation-looking
-    albums ("Best Of", "Greatest Hits", "Collection"...) still at their album year or not found,
-    and songs MusicBrainz only answered through the ISRC fallback.
-  - Flow: Claude shows "current year -> year per source (link)" and saves with set_year after
-    the user's OK.
-  - ~30 doubtful songs justify the flow, ~5 only need `set_year`.
-- **`set_genre(artist, genres, source)`**: manual genre correction, the twin of `set_year`.
+- **Doubtful years: check them on the web with Claude** (the tools are done, see Done). After the
+  full `fill_years` run: count the doubtful ones and try the flow on a batch of 10-20 in Claude
+  Desktop (current year -> year per source, `set_year` after the user's OK).
+- **Unified design** (asked by Facu 2026-11-15): one stylesheet and brand header for every page,
+  chart rules for Claude (`explain("chart style")`), `DESIGN.md`. In progress.
 
 ## Phase 4: audio
 
@@ -123,6 +111,25 @@ Plan:
 4. Navidrome third, if there is interest.
 
 ## Done
+
+### Wave 3 (2026-11-15)
+
+- **`merge_playlists(playlists, name)` / `split_playlist(playlist, by)`** (`merge_split.py`): both
+  only build a draft; `write_draft` creates the playlists. Real run: split preview of one
+  playlist (439 tracks, 6 decade groups).
+- **`find_orphans(playlists, limit)`** (`orphans.py`): Liked Songs in no loaded playlist, with the
+  user's playlist that fits best (share of the playlist in the same genre family + share in the
+  same decade, at least 0.5 of 2). Not checked on real data: Liked Songs wasn't loaded.
+- **`set_year` / `set_genre`** (`corrections.py`): manual corrections that win over MusicBrainz,
+  Spotify and the album year; `fill_years` never overwrites them. Live, demo and acoustic takes
+  get a per-recording year (`tracks.manual_year`). `original_years.source` records how each year
+  was found ("search", "isrc", "manual").
+- **Doubtful years list**: `find_tracks(filters={"doubtful_year": true})` with a "Why" column
+  (compilation album / ISRC only); `library_health` uses the same definition. Real run before the
+  full fill: 158 tracks.
+- **`what_can_i_do()`** (`menu.py`): the menu (single source, also renders the `start` prompt)
+  plus up to 3 suggestions from the cache. A test fails when a tool is missing from the menu.
+  Real run: 1.1 s on 2,923 tracks.
 
 ### Guided setup (2026-11-15)
 

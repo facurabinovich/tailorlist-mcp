@@ -30,12 +30,12 @@ def records(conn: sqlite3.Connection) -> list[dict]:
     """One dict per playlist entry, shaped like the Streamlit app's session records."""
     artists_by_track: dict[str, list[sqlite3.Row]] = {}
     for r in conn.execute(
-        "SELECT ta.track_id, ta.position, a.name, a.genres, a.mb_genres FROM track_artists ta "
+        "SELECT ta.track_id, ta.position, a.name, a.genres, a.mb_genres, a.manual_genres FROM track_artists ta "
         "JOIN artists a ON a.id = ta.artist_id ORDER BY ta.track_id, ta.position"
     ):
         artists_by_track.setdefault(r["track_id"], []).append(r)
 
-    known = years.known_years(conn)
+    known, sources = years.known_years(conn), years.year_sources(conn)
     out = []
     for r in conn.execute(
         "SELECT pt.playlist_id, pt.position, pt.added_at, p.name AS playlist_name, t.* "
@@ -44,8 +44,10 @@ def records(conn: sqlite3.Connection) -> list[dict]:
     ):
         artists = artists_by_track.get(r["id"], [])
         primary = artists[0] if artists else None
-        # Spotify's genres, else MusicBrainz's (only looked up for artists Spotify left empty).
-        genres = (_genres(primary["genres"]) or _genres(primary["mb_genres"])) if primary else []
+        # Manual genres (set_genre), else Spotify's, else MusicBrainz's (only looked up for artists Spotify left empty).
+        genres = store.effective_genres(primary["genres"], primary["mb_genres"], primary["manual_genres"]) if primary else []
+        date, year_source = years.dating(known, r["name"], primary["name"] if primary else "", r["album"],
+                                         r["release_date"], sources, r["manual_year"])
         out.append({
             "id": r["id"],
             "name": r["name"],
@@ -59,11 +61,11 @@ def records(conn: sqlite3.Connection) -> list[dict]:
             "popularity": r["current_popularity"]
             if r["popularity"] == 0 and r["current_id"] and r["current_popularity"] is not None else r["popularity"],
             "duration_ms": r["duration_ms"],
-            # The song's original release year (fill_years) when it is earlier than the album's:
-            # compilations and reissues stop skewing years and decades. album_release_date keeps Spotify's.
-            "release_date": (years.original_date(known, r["name"], primary["name"] if primary else "", r["album"],
-                                                 r["release_date"]) or r["release_date"]),
+            # The song's original release year (fill_years) when it is earlier than the album's, or its manual
+            # year (set_year): compilations and reissues stop skewing years and decades. album_release_date keeps Spotify's.
+            "release_date": date or r["release_date"],
             "album_release_date": r["release_date"],
+            "year_source": year_source,        # album, musicbrainz, isrc or manual
             "added_at": r["added_at"],
             # Original app: genres of the primary artist, comma-separated.
             "artist_genres": ", ".join(genres),
@@ -75,11 +77,6 @@ def records(conn: sqlite3.Connection) -> list[dict]:
 def without_liked(recs: list[dict]) -> list[dict]:
     """The records minus Liked Songs: a liked song that is also in a playlist is not a duplicate."""
     return [r for r in recs if r.get("playlist_id") != store.LIKED_ID]
-
-
-def _genres(raw: str | None) -> list[str]:
-    import json
-    return json.loads(raw) if raw else []
 
 
 _RENAMES = {"id": "track_id", "name": "track_name", "artists": "artist_name",

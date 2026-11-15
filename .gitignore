@@ -9,3 +9,4 @@ build/
 *.db
 .tailorlist*/
 .cache
+.claude/

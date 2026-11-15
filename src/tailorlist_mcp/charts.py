@@ -84,3 +84,9 @@ def tracks_hint(sort: str, n_rows: int) -> str | None:
     if n_rows < 5 or sort not in _TRACK_SORTS:
         return None
     return _finish([f"optional: bar chart of the top 10 by {_TRACK_SORTS[sort]}."], FALLBACK_TABLE_ONLY)
+
+
+def orphans_hint(n_rows: int) -> str | None:
+    if n_rows < MIN_ROWS:
+        return None
+    return _finish(["bar chart of the Orphans column, one bar per suggested playlist."], FALLBACK_TABLE_ONLY)
