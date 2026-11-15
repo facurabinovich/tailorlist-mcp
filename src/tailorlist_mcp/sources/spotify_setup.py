@@ -100,13 +100,14 @@ class SetupSession:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802 (http.server API)
                 parsed = urlparse(self.path)
-                if parsed.path in ("/", "/setup"):
-                    self._send(200, render_page(session.redirect_uri, session.token))
-                    return
                 query = parse_qs(parsed.query)
-                if parsed.path == session.callback_path and session.login and ("code" in query or "error" in query):
+                # Spotify's redirect first: a redirect URI without a path lands on "/", the setup page's address.
+                if (parsed.path or "/") == (session.callback_path or "/") and session.login and ("code" in query or "error" in query):
                     title, body = session.login._handle(query)
                     self._send(200, _result_page(title, body, back=title != "Connected"))
+                    return
+                if parsed.path in ("/", "/setup"):
+                    self._send(200, render_page(session.redirect_uri, session.token))
                     return
                 self._send(404, _result_page("Not found", "", back=False))
 

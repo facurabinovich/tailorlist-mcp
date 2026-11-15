@@ -155,6 +155,21 @@ class TestSetupSession:
         assert setup.wait(5)
         assert spotify_auth.load_token()["access_token"] == "a"
 
+    def test_redirect_uri_without_a_path_shares_the_root_with_the_page(self, env, monkeypatch):
+        # http://127.0.0.1:<port> sends Spotify's redirect to "/", where the setup page also lives.
+        monkeypatch.setenv("SPOTIFY_REDIRECT_URI", f"http://127.0.0.1:{_free_port()}")
+        s = spotify_setup.start_setup()
+        try:
+            root = settings.redirect_uri()
+            assert "client_id" in _req(root + "/")[2]                      # the page
+            _req(s.url, {"client_id": GOOD, "token": s.token})
+            monkeypatch.setattr(spotify_auth, "exchange_code", MagicMock(return_value={"access_token": "a"}))
+            status, _, body = _req(f"{root}/?code=c&state={s.login.state}")
+            assert status == 200 and "Connected" in body and s.wait(5)
+            assert spotify_auth.load_token()["access_token"] == "a"
+        finally:
+            s.stop()
+
     def test_unknown_path_and_early_callback_are_404(self, setup):
         base = setup.url.rsplit("/", 1)[0]
         assert _req(f"{base}/nope")[0] == 404
