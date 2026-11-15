@@ -52,6 +52,7 @@ def records(conn: sqlite3.Connection) -> list[dict]:
             "artists": primary["name"] if primary else "",
             "secondary_artists": ", ".join(a["name"] for a in artists[1:]),
             "playlist_name": r["playlist_name"],
+            "playlist_id": r["playlist_id"],
             "album": r["album"],
             # Option A (2026-11-10): a replaced album version (popularity 0) counts with the
             # popularity of the version Spotify serves instead.
@@ -69,6 +70,11 @@ def records(conn: sqlite3.Connection) -> list[dict]:
             "url": r["url"],
         })
     return out
+
+
+def without_liked(recs: list[dict]) -> list[dict]:
+    """The records minus Liked Songs: a liked song that is also in a playlist is not a duplicate."""
+    return [r for r in recs if r.get("playlist_id") != store.LIKED_ID]
 
 
 def _genres(raw: str | None) -> list[str]:
@@ -162,9 +168,9 @@ def overview_data(conn: sqlite3.Connection, current_year: int | None = None) -> 
         for _, r in counts.iterrows()
     ]
 
-    exact = comparison.exact_duplicates_across_playlists(recs)
+    exact = comparison.exact_duplicates_across_playlists(without_liked(recs))
     versions = comparison.different_versions_across_playlists(recs)
-    in_several = int((df.groupby("track_id")["playlist_name"].nunique() > 1).sum())
+    in_several = int((df[df["playlist_name"] != store.LIKED_NAME].groupby("track_id")["playlist_name"].nunique() > 1).sum())
 
     pop = deduped["popularity_raw"].dropna() if ov.has_popularity(deduped) else pd.Series(dtype=float)
     pop_bins = []
@@ -303,10 +309,10 @@ def _match_key(name: str) -> str:
 
 def find_playlist(conn: sqlite3.Connection, ref: str) -> sqlite3.Row:
     """A cached playlist by ID, Spotify link, exact name or a unique part of its name."""
-    from tailorlist_mcp.collection import playlist_id_from
+    from tailorlist_mcp.collection import is_liked_ref, playlist_id_from
 
     rows = conn.execute("SELECT id, name, url FROM playlists ORDER BY name").fetchall()
-    pid = playlist_id_from(ref)
+    pid = store.LIKED_ID if is_liked_ref(ref) else playlist_id_from(ref)
     for r in rows:
         if r["id"] == pid:
             return r

@@ -36,6 +36,22 @@ class FakeClient:
         }
         self.item_calls = 0
         self.followers = 7
+        self.liked = [  # newest first, as me/tracks returns them
+            {"added_at": "2024-03-02T00:00:00Z", "track": _track("t3", "Three", ["ar3"], "1987")},
+            {"added_at": "2024-03-01T00:00:00Z", "track": _track("t1", "One", ["ar1"])},
+            {"added_at": "2024-02-01T00:00:00Z", "track": {"type": "episode", "id": "ep1"}},
+        ]
+        self.liked_error = None
+        self.saved_reads = 0
+
+    def saved_summary(self):
+        if self.liked_error:
+            raise self.liked_error
+        return len(self.liked), (self.liked[0]["added_at"] if self.liked else None)
+
+    def saved_tracks(self):
+        self.saved_reads += 1
+        return iter(self.liked)
 
     def me(self):
         return {"id": "me", "display_name": "Facu"}
@@ -125,8 +141,8 @@ def test_list_playlists_marks_ownership_and_cache_state(conn):
     collection.load_playlists(client, conn, [PL_A])
     client.snapshots[PL_A] = "s2"
     out = collection.list_playlists(client, conn)
-    a, b = out["playlists"]
-    assert out["user"] == "Facu"
+    liked, a, b = out["playlists"]
+    assert out["user"] == "Facu" and liked["id"] == "liked"
     assert (a["mine"], a["tracks"], a["cache"]) == (True, 4, "changed")
     assert (b["mine"], b["tracks"], b["cache"], b["owner"]) == (False, 3, None, "Ana")
 
@@ -210,3 +226,76 @@ def test_find_replaced_tracks(conn):
     assert "Three, - Remastered - Best Of (2005), popularity 40, https://open.spotify.com/track/alt3" in out
     assert "Someone else" not in out and "90" not in out and "80" not in out  # other artist; not playable here
     assert "Beta" in out and "Alpha" not in queries.find_replaced_tracks(conn, ["Beta"], client=client).split("Not playable")[1]
+
+
+# ---------------------------------------------------------------- Liked Songs
+
+def test_listing_shows_liked_songs_first_with_total_and_cache_state(conn):
+    client = FakeClient()
+    liked = collection.list_playlists(client, conn)["playlists"][0]
+    assert (liked["id"], liked["name"], liked["tracks"], liked["mine"], liked["cache"]) == ("liked", "Liked Songs", 3, True, None)
+    assert liked["url"] == "https://open.spotify.com/collection/tracks"
+    collection.load_playlists(client, conn, ["liked"])
+    assert collection.list_playlists(client, conn)["playlists"][0]["cache"] == "current"
+    client.liked.insert(0, {"added_at": "2024-04-01T00:00:00Z", "track": _track("t9", "Nine", ["ar1"])})
+    assert collection.list_playlists(client, conn)["playlists"][0]["cache"] == "changed"
+
+
+def test_listing_survives_an_error_reading_liked_songs(conn):
+    client = FakeClient()
+    client.liked_error = SpotifyError("403")
+    out = collection.list_playlists(client, conn)
+    assert [p["id"] for p in out["playlists"]] == [PL_A, PL_B]
+    assert "Liked Songs could not be read" in out["note"] and "connect_spotify" in out["note"]
+
+
+@pytest.mark.parametrize("ref", ["liked", " Liked Songs ", "LIKED", "https://open.spotify.com/collection/tracks",
+                                 "https://open.spotify.com/collection/tracks?si=abc"])
+def test_every_liked_ref_loads_liked_songs(conn, ref):
+    out = collection.load_playlists(FakeClient(), conn, [ref])
+    assert out["results"][0] == {"id": "liked", "name": "Liked Songs", "status": "loaded", "tracks": 2, "skipped": 1}
+    row = conn.execute("SELECT * FROM playlists").fetchone()
+    assert (row["id"], row["owner_id"], row["followers"], row["url"]) == ("liked", "me", None, store.LIKED_URL)
+    # Spotify's order (newest first) is kept as the positions
+    assert [r[0] for r in conn.execute("SELECT track_id FROM playlist_tracks ORDER BY position")] == ["t3", "t1"]
+
+
+def test_liked_refs_are_not_playlist_ids_and_playlist_refs_are_not_liked():
+    assert collection.playlist_id_from("liked") is None
+    assert collection.playlist_id_from("https://open.spotify.com/collection/tracks") is None
+    assert not collection.is_liked_ref(PL_A) and not collection.is_liked_ref(f"https://open.spotify.com/playlist/{PL_A}")
+    assert not collection.is_liked_ref("Liked Songs 2")
+
+
+def test_liked_songs_unchanged_is_skipped_and_reread_when_total_or_newest_changes_or_forced(conn):
+    client = FakeClient()
+    collection.load_playlists(client, conn, ["liked"])
+    assert client.saved_reads == 1
+    assert collection.load_playlists(client, conn, ["liked"])["results"][0]["status"] == "unchanged"
+    assert client.saved_reads == 1
+    assert collection.load_playlists(client, conn, ["liked"], force=True)["results"][0]["status"] == "loaded"
+    assert client.saved_reads == 2
+
+    client.liked.append({"added_at": "2020-01-01T00:00:00Z", "track": _track("t4", "Four", ["ar1"])})   # total changes
+    assert collection.load_playlists(client, conn, ["liked"])["results"][0]["status"] == "loaded"
+    client.liked[0]["added_at"] = "2024-05-01T00:00:00Z"                                                  # newest date changes
+    assert collection.load_playlists(client, conn, ["liked"])["results"][0]["status"] == "loaded"
+    assert client.saved_reads == 4
+
+
+def test_liked_songs_load_in_the_same_call_as_a_normal_playlist(conn):
+    out = collection.load_playlists(FakeClient(), conn, [PL_A, "liked"])
+    assert [(r["id"], r["status"]) for r in out["results"]] == [(PL_A, "loaded"), ("liked", "loaded")]
+    assert out["collection"]["playlists"] == 2
+
+
+def test_liked_songs_unload_works(conn):
+    collection.load_playlists(FakeClient(), conn, ["liked", PL_A])
+    store.remove_playlists(conn, ["liked"])
+    assert [r[0] for r in conn.execute("SELECT id FROM playlists")] == [PL_A]
+    assert conn.execute("SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = 'liked'").fetchone()[0] == 0
+
+
+def test_parse_item_accepts_a_me_tracks_row():
+    parsed = store.parse_item({"added_at": "2024-03-02T00:00:00Z", "track": _track("t3", "Three", ["ar3"])})
+    assert parsed["track"]["id"] == "t3" and parsed["added_at"] == "2024-03-02T00:00:00Z" and parsed["artists"] == [("ar3", "AR3")]

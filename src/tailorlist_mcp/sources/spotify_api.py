@@ -76,6 +76,16 @@ class SpotifyClient:
     def playlist_items(self, playlist_id: str) -> Iterator[dict]:
         return self.paged(f"playlists/{playlist_id}/items", limit=100)
 
+    def saved_tracks(self) -> Iterator[dict]:
+        """The Liked Songs, newest first: rows of {"added_at", "track"}."""
+        return self.paged("me/tracks", limit=50)
+
+    def saved_summary(self) -> tuple[int, str | None]:
+        """(how many Liked Songs, when the newest was added): one call."""
+        page = self.get("me/tracks", limit=1)
+        items = page.get("items") or []
+        return int(page.get("total") or 0), (items[0].get("added_at") if items else None)
+
     def tracks(self, track_ids: list[str], market: str | None = None) -> list[dict | None]:
         """Track objects in the order asked (None where Spotify has nothing). With
         market="from_token" Spotify relinks: a replaced track comes back as the version it
@@ -111,6 +121,18 @@ class SpotifyClient:
         if snapshot_id:
             body["snapshot_id"] = snapshot_id
         return self.request("DELETE", f"playlists/{playlist_id}/items", json=body).get("snapshot_id") or ""
+
+    def replace_items(self, playlist_id: str, uris: list[str]) -> str:
+        """Replace the WHOLE playlist with these (up to 100) track URIs. Tracks that stay keep their added
+        date; of a duplicated track left out once, the copy that remains has the earliest copy's date."""
+        if len(uris) > MAX_PER_CALL:
+            raise ValueError(f"Spotify takes {MAX_PER_CALL} tracks per call.")
+        return self.request("PUT", f"playlists/{playlist_id}/items", json={"uris": uris}).get("snapshot_id") or ""
+
+    def reorder_items(self, playlist_id: str, range_start: int, insert_before: int, range_length: int = 1) -> str:
+        """Move a block of items (each keeps its added date). Returns the new snapshot_id."""
+        body = {"range_start": range_start, "insert_before": insert_before, "range_length": range_length}
+        return self.request("PUT", f"playlists/{playlist_id}/items", json=body).get("snapshot_id") or ""
 
     def search_tracks(self, query: str, limit: int = 5) -> list[dict]:
         """Track search, every market (market=from_token needs the user-read-private scope; check

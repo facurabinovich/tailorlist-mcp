@@ -140,6 +140,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# Liked Songs is cached like a playlist under this fixed ID (Spotify gives it none).
+LIKED_ID = "liked"
+LIKED_NAME = "Liked Songs"
+LIKED_URL = "https://open.spotify.com/collection/tracks"
+
+
 def connect(path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path or settings.cache_path(), timeout=30)
     conn.row_factory = sqlite3.Row

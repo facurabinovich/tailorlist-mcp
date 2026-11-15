@@ -15,6 +15,9 @@ def pid(c: str) -> str:
     return c * 22
 
 
+OLD, NOW = "2024-01-01T00:00:00Z", "2026-11-15T12:00:00Z"
+
+
 class FakeSpotify:
     """Playlists in memory with Spotify's semantics: add at a position, remove every copy, snapshot per write."""
 
@@ -31,11 +34,13 @@ class FakeSpotify:
         self.fail_at = None             # raise on the Nth write call (1-based)
         self.snap = 0
         self.lag = False
+        self.liked = []                 # Liked Songs: track IDs, newest first
 
     # -- fixtures
-    def add_playlist(self, p, name, items, owner="me", collaborative=False, public=True):
+    def add_playlist(self, p, name, items, owner="me", collaborative=False, public=True, dates=None):
         self.playlists[p] = {"name": name, "owner": owner, "items": list(items), "snapshot": self._snap(),
-                             "collaborative": collaborative, "public": public}
+                             "collaborative": collaborative, "public": public,
+                             "dates": list(dates) if dates else [OLD] * len(items)}   # added date of each item, by position
 
     def replaced(self, old, new, same_album=False):
         """old is an album version Spotify replaced with new (popularity 0, relinks to new)."""
@@ -54,7 +59,14 @@ class FakeSpotify:
     def external_edit(self, p):
         """Someone else adds a track."""
         self.playlists[p]["items"].append(tid(399))
+        self.playlists[p]["dates"].append(NOW)
         self.playlists[p]["snapshot"] = self._snap()
+
+    def _sync(self, p):
+        """Some tests edit "items" directly: dates follow by length (extra items are old)."""
+        pl = self.playlists[p]
+        pl["dates"] = (pl["dates"] + [OLD] * len(pl["items"]))[:len(pl["items"])]
+        return pl
 
     def _write(self, *call):
         self.calls.append(call)
@@ -83,8 +95,9 @@ class FakeSpotify:
         return self._meta(p)
 
     def playlist_items(self, p):
-        for t in self.playlists[p]["items"]:
-            yield {"added_at": "2024-01-01T00:00:00Z", "item": self.catalog[t]}
+        self._sync(p)
+        for t, d in zip(self.playlists[p]["items"], self.playlists[p]["dates"]):
+            yield {"added_at": d, "item": self.catalog[t]}
 
     def tracks(self, ids, market=None):
         out = []
@@ -99,6 +112,13 @@ class FakeSpotify:
             else:
                 out.append(self.catalog[i])
         return out
+
+    def saved_summary(self):
+        return len(self.liked), "2024-03-01T00:00:00Z"
+
+    def saved_tracks(self):
+        for t in self.liked:
+            yield {"added_at": "2024-03-01T00:00:00Z", "track": self.catalog[t]}
 
     def artists(self, ids):
         return [{"id": a, "genres": ["rock"], "popularity": 50} for a in ids]
@@ -115,9 +135,10 @@ class FakeSpotify:
     def add_items(self, p, uris, position=None):
         self._write("add", p, len(uris), position)
         ids = [u.rsplit(":", 1)[1] for u in uris]
-        items = self.playlists[p]["items"]
+        items = self._sync(p)["items"]
         at = len(items) if position is None else position
         items[at:at] = ids
+        self.playlists[p]["dates"][at:at] = [NOW] * len(ids)
         self.playlists[p]["old_snapshot"] = self.playlists[p]["snapshot"]
         self.playlists[p]["snapshot"] = self._snap()
         return self.playlists[p]["snapshot"]
@@ -125,10 +146,42 @@ class FakeSpotify:
     def remove_items(self, p, uris, snapshot_id=None):
         self._write("remove", p, len(uris))
         gone = {u.rsplit(":", 1)[1] for u in uris}
-        self.playlists[p]["items"] = [t for t in self.playlists[p]["items"] if t not in gone]
+        pl = self._sync(p)
+        keep = [n for n, t in enumerate(pl["items"]) if t not in gone]
+        pl["items"], pl["dates"] = [pl["items"][n] for n in keep], [pl["dates"][n] for n in keep]
+        return self._bump(p)
+
+    def _bump(self, p):
         self.playlists[p]["old_snapshot"] = self.playlists[p]["snapshot"]
         self.playlists[p]["snapshot"] = self._snap()
         return self.playlists[p]["snapshot"]
+
+    def replace_items(self, p, uris):
+        """Whole playlist replaced: a track that stays keeps its date (the earliest of its copies), a new one gets now."""
+        assert len(uris) <= 100
+        self._write("replace", p, len(uris))
+        pl = self._sync(p)
+        earliest = {}
+        for t, d in zip(pl["items"], pl["dates"]):
+            earliest[t] = min(d, earliest.get(t, d))
+        ids = [u.rsplit(":", 1)[1] for u in uris]
+        pl["items"], pl["dates"] = ids, [earliest.get(t, NOW) for t in ids]
+        return self._bump(p)
+
+    def reorder_items(self, p, range_start, insert_before, range_length=1):
+        """One block moved, dates follow the tracks. Like Spotify, insert_before counts before the block is taken out."""
+        pl = self._sync(p)
+        n = len(pl["items"])
+        assert 0 <= range_start and range_start + range_length <= n and 0 <= insert_before <= n, "bad range"
+        assert not range_start <= insert_before <= range_start + range_length, "no-op move"
+        self._write("move", p, range_start, insert_before, range_length)
+        for key in ("items", "dates"):
+            seq = pl[key]
+            block = seq[range_start:range_start + range_length]
+            rest = seq[:range_start] + seq[range_start + range_length:]
+            at = insert_before if insert_before < range_start else insert_before - range_length
+            pl[key] = rest[:at] + block + rest[at:]
+        return self._bump(p)
 
     def writes(self):
         return [c for c in self.calls]
@@ -586,3 +639,43 @@ def test_export_formats(conn, sp):
 def test_primary_artist_only_in_spotlistr_lines():
     rows = [{"artist": "A", "name": "Song"}, {"artist": "A", "name": "Song"}]
     assert export.spotlistr_lines(rows) == "A - Song\nA - Song"       # duplicates kept
+
+
+# ---------------------------------------------------------------- Liked Songs are read-only
+
+@pytest.mark.parametrize("ref", ["liked", "Liked Songs", "https://open.spotify.com/collection/tracks"])
+def test_write_tools_refuse_liked_songs(conn, sp, ref):
+    sp.liked = [tid(1), tid(20)]
+    load(sp, conn, pid("A"), "liked")
+    for call in (lambda: write.add_tracks(conn, sp, ref, [tid(30)]),
+                 lambda: write.remove_tracks(conn, sp, ref, [tid(1)]),
+                 lambda: write.replace_versions(conn, sp, ref)):
+        with pytest.raises(write.WriteError, match="Liked Songs can't be edited"):
+            call()
+    assert sp.calls == []
+
+
+def test_whole_library_replace_versions_skips_liked_songs(conn, sp_replaced):
+    sp = sp_replaced
+    sp.liked = [tid(2), tid(20)]
+    load(sp, conn, pid("A"), pid("B"), "liked")
+    text = write.replace_versions(conn, sp, now=1)
+    assert "Liked Songs holds replaced versions" in text and "in 1 playlist," in text
+    write.confirm(sp, conn, code_of(text), now=2)
+    assert all(c[1] != "liked" for c in sp.calls)
+
+
+def test_reload_never_asks_spotify_for_the_liked_playlist(conn, sp):
+    sp.liked = [tid(1)]
+    load(sp, conn, "liked")
+    sp.playlist = lambda p: (_ for _ in ()).throw(AssertionError(p))
+    assert write._reload(sp, conn, ["liked"]) == ""
+
+
+def test_liked_songs_can_feed_a_new_playlist(conn, sp):
+    sp.liked = [tid(20), tid(21)]
+    load(sp, conn, "liked")
+    text = write.create_playlist(conn, sp, "From likes", [tid(20), tid(21)], now=1)
+    assert "from Liked Songs" in text
+    write.confirm(sp, conn, code_of(text), now=2)
+    assert sp.playlists[pid("N")]["items"] == [tid(20), tid(21)]

@@ -16,7 +16,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, progress, years, queries, settings, store, write
+from tailorlist_mcp import __version__, browser, collection, dashboard, drafts, export, genre_fill, glossary, health, progress, years, queries, settings, store, write
 from tailorlist_mcp.sources import spotify_auth
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -33,8 +33,9 @@ short list.
 
 Analyze: dashboards (show_overview, show_playlist, show_draft) open in the user's browser;
 after one opens, add a short comment and suggest what to look at next — don't repeat its
-numbers. For questions use the data tools (collection_stats, find_tracks, find_duplicates,
-compare_playlists, find_replaced_tracks) and chart the small tables yourself. Never browse
+numbers. For questions use the data tools (library_health, collection_stats, find_tracks,
+find_duplicates, compare_playlists, find_replaced_tracks). Be visual: chart every table of 3+
+rows as its `Chart:` line says, one chart per answer; comment on it, don't repeat it. Never browse
 Spotify's website or read the cache file. When a term needs explaining, call explain(term).
 Many artists lack genres: offer fill_genres; compilations and reissues date songs by the album:
 offer fill_years. Start either only with their OK.
@@ -49,7 +50,7 @@ ignores private; say they can make it private in the app), and call confirm_writ
 the user explicitly approves that exact preview. When a preview lists replaced album versions or unavailable tracks, ask: all
 current versions (recommend it: it's the version Spotify actually plays, its stats are up
 to date, often a newer remaster), keep the saved ones, or a mix. Never delete playlists.
-undo_last_write reverts the last add, remove or replace. reset_progress deletes the
+undo_last_write reverts the last add, remove, replace, sort or dedupe. reset_progress deletes the
 organizing progress: only with explicit consent.
 
 Link to Spotify whenever a tool gives you a link.
@@ -156,7 +157,8 @@ async def load_playlists(playlists: list[str], ctx: Context, force: bool = False
     (list_my_playlists shows the options); don't load all of them unless they ask for that.
 
     Args:
-        playlists: playlist IDs or Spotify playlist links of the playlists the user chose.
+        playlists: playlist IDs or Spotify playlist links of the playlists the user chose
+            ("liked" loads their Liked Songs).
         force: re-read playlists even if they haven't changed since the last load.
 
     Playlists that haven't changed are skipped. The dashboard covers everything in the cache.
@@ -395,6 +397,7 @@ Understand your collection
  • Ask anything: "my most-saved artists", "80s tracks under 3 minutes"...
 
 Clean it up
+ • Health check: everything that is off, in one report
  • Duplicates and the same song saved in different versions
  • Old album versions Spotify replaced, and tracks that no longer play
  • Fill missing genres (MusicBrainz)
@@ -403,7 +406,7 @@ Clean it up
 Build better playlists
  • Group your tracks by decade, genre family or specific genres into drafts
  • Review and tweak the drafts together, then save them to Spotify
- • Add or remove tracks in existing playlists (always previewed, undoable)
+ • Add, remove, sort or de-duplicate tracks in existing playlists (always previewed, undoable)
  • Track how much of your library is already organized
 
 If no playlists are loaded yet, say that the first step is choosing which ones to load,
@@ -452,6 +455,7 @@ def connect_spotify() -> str:
 def list_my_playlists() -> dict:
     """The user's Spotify playlists: id, name, track count, whether they own it, its link, and
     whether it is already in the local cache ("current", "changed" since loading, or null).
+    The user's Liked Songs come first, as id "liked".
 
     Show the list to the user and ask which playlists they want to load before calling
     load_playlists.
@@ -549,6 +553,20 @@ def find_duplicates(playlists: list[str] | None = None, kind: str = "all", limit
         limit: rows per list (default 50, max 500).
     """
     return _answer(queries.find_duplicates, playlists, kind, limit)
+
+
+@mcp.tool()
+def library_health(playlists: list[str] | None = None) -> str:
+    """One report of what is off in the loaded playlists (or only the ones given): duplicates
+    inside and across playlists, different versions, replaced or unplayable tracks, skipped
+    items, artists without genres, songs not dated by original release, doubtful compilation
+    years and near-identical playlists. The place to start when the user asks what is wrong
+    with their library. Reads the cache only: no calls to Spotify or MusicBrainz.
+
+    Args:
+        playlists: names, IDs or links; default all loaded playlists.
+    """
+    return _answer(health.library_health, playlists)
 
 
 @mcp.tool()
@@ -716,6 +734,41 @@ async def replace_versions(playlist: str | None = None) -> str:
         playlist: name, unique part of a name, ID or link; default all loaded playlists.
     """
     return await _write_tool(lambda conn, client: write.replace_versions(conn, client, playlist))
+
+
+@mcp.tool()
+async def sort_playlist(playlist: str, by: str, descending: bool = False) -> str:
+    """PREVIEW ONLY, writes nothing: reorder one of the user's playlists. Every track keeps its added date. Returns
+    the preview (how many tracks move, the first rows of the new order, how many Spotify calls) and a code for
+    confirm_write; if the playlist is already in that order it says so and returns no code. Undo with undo_last_write.
+
+    Args:
+        playlist: name, unique part of a name, ID or link (own or collaborative playlists; not Liked Songs).
+        by: "year" (original release year when known, else the album's), "artist" (primary artist, then year, album,
+            track), "popularity", "added" (date added), "name" or "duration". Ties keep their current order and
+            tracks without a value go last.
+        descending: largest or latest first.
+    """
+    return await _write_tool(lambda conn, client: write.sort_playlist(conn, client, playlist, by, descending))
+
+
+@mcp.tool()
+async def dedupe_playlist(playlist: str, kind: str = "all", keep: list[str] | None = None,
+                          versions_rule: str | None = None) -> str:
+    """PREVIEW ONLY, writes nothing: remove duplicates inside one playlist. "Exact" = the same track more than once
+    (one copy stays, at the first one's position); "versions" = the same song and primary artist under different
+    IDs, where the USER decides which version stays. Songs without a decision are left untouched and listed with
+    their options (no code if nothing can be done yet). Returns the preview and a code for confirm_write. Caveat:
+    in large playlists (over 100 items) the tracks with exact duplicates show today's date as added, because
+    Spotify can't remove a single copy; the preview names them.
+
+    Args:
+        playlist: name, unique part of a name, ID or link (own or collaborative playlists; not Liked Songs).
+        kind: "all" (default), "exact" or "versions".
+        keep: track IDs or links of the versions that stay, one per song.
+        versions_rule: "most_popular" or "earliest_added", applied to the songs keep doesn't cover.
+    """
+    return await _write_tool(lambda conn, client: write.dedupe_playlist(conn, client, playlist, kind, keep, versions_rule))
 
 
 @mcp.tool()

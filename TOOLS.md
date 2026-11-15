@@ -33,8 +33,8 @@ dashboards, data tools for everything else).
 | Tool | Replaces in the original | Phase |
 |---|---|---|
 | `connect_spotify` | (new: the app used its own Spotify app) | ✅ |
-| `list_my_playlists` | Home: add playlists by URL | ✅ |
-| `load_playlists(playlists, force)` | Home: review + load; opens the overview | ✅ |
+| `list_my_playlists` | Home: add playlists by URL. Liked Songs comes first, as the pseudo-playlist `liked` (new) | ✅ |
+| `load_playlists(playlists, force)` | Home: review + load; opens the overview. `"liked"` loads Liked Songs (read-only: the write tools refuse it; it can feed new playlists) | ✅ |
 | `unload_playlists(playlists)` | (new, asked by Facu) take playlists out of the local cache and the drafts; Spotify untouched; shows the overview of what remains | ✅ |
 | `forget_my_data(also_log_out)` | Home: "Delete my session data", "Start over" | ✅ |
 | `fill_genres()` | (new) MusicBrainz genres for artists Spotify leaves empty; background, ~1 req/s, cached | ✅ |
@@ -57,6 +57,7 @@ dashboards, data tools for everything else).
 | `collection_stats(group_by, split_by?, metrics?, filters?, limit?)` | counts and averages by decade, year, artist, album, genre, genre family, playlist, month added or popularity bin, optionally split by a second dimension (e.g. decade × playlist). Metrics: unique tracks, playlist entries, hours, average popularity, share. Same filters as `find_tracks` | ✅ |
 | `find_tracks(filters, sort?, limit?)` | listings with filters: playlists, artist, album, genre or genre family, decade or year range, popularity range, added between, duration range, text in the name; sort by popularity, year, date added, duration. Audio features and mood ⏳4 | ✅ |
 | `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
+| `library_health(playlists?)` | (new) one offline report of what is off: exact duplicates inside and across playlists, different versions, replaced and unplayable tracks, skipped items, artists without genres, songs not dated yet, doubtful compilation years (heuristic on the album title), near-identical playlists (80% of the smaller, at least 10 tracks); each with the tool that goes deeper | ✅ |
 | `find_replaced_tracks(playlists?)` | tracks with popularity 0: album versions Spotify replaced (with the version it plays now, from relinking) and tracks not playable in the user's country (with alternatives from search). Stats use the current version's popularity. Not in the original app | ✅ |
 | `explain(term)` | (the original's Glossary page) metric definitions, read when the user asks what a number means; moved out of the server instructions, which Claude Code truncated | ✅ |
 | `compare_playlists(playlists?)` | one row per playlist: size, followers, hours, average duration, longest/shortest track, average popularity, genre diversity, release era (median, oldest, newest year), playlist age (first/last added), tracks only in that playlist; plus how many tracks each pair shares | ✅ |
@@ -72,7 +73,9 @@ dashboards, data tools for everything else).
 | `write_draft(draft, groups?, names?)` | (new) one playlist per draft group in a single preview; marks the tracks done | ✅ |
 | `add_tracks(playlist, tracks)` / `remove_tracks(playlist, tracks)` | (new) edit existing playlists, with preview; never delete playlists | ✅ |
 | `replace_versions(playlist?)` | (new, from the backlog) swap replaced album versions for the current version, same position | ✅ |
-| `undo_last_write()` | (new) revert the last add, remove or replace | ✅ |
+| `sort_playlist(playlist, by, descending?)` | (new) reorder a playlist by year, artist, popularity, date added, name or duration; every track keeps its added date (one call up to 100 tracks, block moves beyond) | ✅ |
+| `dedupe_playlist(playlist, kind?, keep?, versions_rule?)` | (new) remove exact duplicates (one copy stays where the first was) and extra versions of a song (the user picks which stays, or a rule: most popular / earliest added). Up to 100 tracks the added dates are kept; beyond that the de-duplicated tracks show today's date and the preview says so | ✅ |
+| `undo_last_write()` | (new) revert the last add, remove, replace, sort or dedupe | ✅ |
 | `confirm_write(code)` | (new) the only tool that writes: carries out a previewed plan; keep it on "ask every time" | ✅ |
 | `export_tracks(tracks or group, format)` | the "Artist - Song" text for Spotlistr, track URLs, CSV | ✅ |
 

@@ -52,15 +52,15 @@ def lines(text):
 def test_stats_by_decade_counts_unique_tracks_and_shares(conn):
     out = lines(queries.collection_stats(conn, "decade"))
     assert out[0].startswith("unique_tracks, share by decade. Selection: 6 unique tracks")
-    assert out[1] == "decade | unique_tracks | share_%"
+    assert out[1] == "decade | unique_tracks | share_% | bar"
     # t1 1994, t2 1996 -> 1990s; t3 2005 -> 2000s; t5 2010 and t4 2021; t6 has no year
-    assert out[2:6] == ["1990s | 2 | 33.3", "2000s | 1 | 16.7", "2010s | 1 | 16.7", "2020s | 1 | 16.7"]
+    assert [r.rsplit(" | ", 1)[0] for r in out[2:6]] == ["1990s | 2 | 33.3", "2000s | 1 | 16.7", "2010s | 1 | 16.7", "2020s | 1 | 16.7"]
     assert "1 unique track has no release year and is left out of the groups." in out
 
 
 def test_stats_metrics_entries_hours_and_popularity(conn):
     out = lines(queries.collection_stats(conn, "playlist", metrics=["entries", "unique_tracks", "hours", "avg_popularity"]))
-    rows = {r.split(" | ")[0]: r.split(" | ")[1:] for r in out[2:5]}
+    rows = {r.split(" | ")[0]: r.split(" | ")[1:-1] for r in out[2:5]}   # last cell is the bar
     assert rows["Two"] == ["3", "2", "0.12", "55.0"]    # t5 twice: 3 entries, 2 unique tracks; 7 min = 0.12 h; (60+50)/2
     assert rows["One"] == ["4", "4", "0.23", "50.0"]
 
@@ -83,9 +83,9 @@ def test_stats_split_and_filters(conn):
 
 def test_stats_month_added_and_popularity_bin(conn):
     out = lines(queries.collection_stats(conn, "month_added", metrics=["unique_tracks"]))
-    assert out[2:5] == ["2024-01 | 2", "2024-02 | 2", "2024-03 | 2"]
+    assert [r.rsplit(" | ", 1)[0] for r in out[2:5]] == ["2024-01 | 2", "2024-02 | 2", "2024-03 | 2"]
     bins = lines(queries.collection_stats(conn, "popularity_bin", metrics=["unique_tracks"]))
-    assert bins[2] == "20-24 | 1" and bins[-3].startswith("80-84 | 1")
+    assert bins[2].startswith("20-24 | 1") and bins[-4].startswith("80-84 | 1")
 
 
 def test_stats_limit_and_errors(conn):
@@ -133,7 +133,7 @@ def test_find_tracks_sort_limit_and_links(conn):
     assert out[2].endswith("https://open.spotify.com/track/t1")
     oldest = lines(queries.find_tracks(conn, None, sort="year", ascending=True, limit=1))
     assert oldest[2].split(" | ")[1] == "Alpha Song"
-    last = lines(queries.find_tracks(conn, None, sort="year", limit=6))[-1]
+    last = lines(queries.find_tracks(conn, None, sort="year", limit=6))[-2]   # [-1] is the chart hint
     assert last.split(" | ")[1] == "Zeta"        # no year sorts last
     # Beta Song is in two playlists: one row, both playlists, earliest add date
     beta = [r for r in lines(queries.find_tracks(conn, Filters(text="beta")))[2:]][0].split(" | ")
@@ -170,7 +170,7 @@ def test_compare_playlists(conn):
     assert "One | Two | 1" in text                       # t2
     assert "Longest track: Gamma" in text
     scoped = queries.compare_playlists(conn, ["One", "Three"])
-    assert "Comparison of 2 playlists" in scoped and "none" in scoped.splitlines()[-1]
+    assert "Comparison of 2 playlists" in scoped and "none" in scoped.splitlines()[-2]
 
 
 def test_empty_cache(tmp_path):

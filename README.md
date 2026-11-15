@@ -1,10 +1,13 @@
 # Tailorlist MCP
 
-> Work in progress. Phases 1, 2a and 2b work: load playlists, dashboards, stats, searches, duplicates, comparison, grouping into drafts.
+> Status: phases 1 to 3 work: reading your playlists, analysis, dashboards, grouping tracks into
+> draft playlists, and writing to Spotify. Not available yet: audio features from ReccoBeats and
+> grouping by sound (phase 4), and a packaged install (phase 5). Install is from source.
 
 An MCP server that lets Claude read, analyze and reorganize **your own** Spotify library:
-find duplicates across playlists, group thousands of tracks by genre family or by sound,
-compare playlists, and write the result back to Spotify as playlists with the exact tracks.
+find duplicates across playlists, group thousands of tracks by genre family (grouping by sound
+is planned, not available yet), compare playlists, and write the result back to Spotify as
+playlists with the exact tracks.
 
 ## Why
 
@@ -20,8 +23,9 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
   Premium). Your app, your token, your machine: nothing goes through a third-party server.
 - Caches your collection in a local SQLite file. Claude only sees summaries and IDs, so a
   5,000-track library doesn't flood the conversation.
-- Genres come from Spotify, filled in from MusicBrainz where Spotify has none. Audio features
-  come from ReccoBeats.
+- Genres come from Spotify, filled in from MusicBrainz where Spotify has none. Release years
+  can be dated by the original release, also from MusicBrainz.
+- Planned (phase 4, not available yet): audio features from ReccoBeats, and grouping by sound.
 - It previews every change before writing, and never deletes a playlist.
 
 ## Setup (for now, from source)
@@ -35,14 +39,38 @@ playlist from an exact list of tracks. Reorganizing a collection you already hav
 5. Add it to Claude Code: `claude mcp add -s user tailorlist -- /path/to/.venv/bin/tailorlist-mcp`.
    For Claude Desktop, add it under `mcpServers` in `claude_desktop_config.json`.
 
-Tools so far: `connect_spotify`, `list_my_playlists`, `load_playlists` (shows the overview
-dashboard after loading), `show_overview`, `show_playlist`, `get_playlist_tracks`,
-`collection_stats` (counts and averages by decade, artist, genre, playlist, month...),
-`find_tracks`, `find_duplicates`, `compare_playlists`, `fill_genres` (MusicBrainz genres for
-artists Spotify leaves empty, in the background, about 1 request per second), `group_tracks` (draft playlists by decade / genre family / chosen genres), `show_draft`, `edit_draft`, `organize_progress`, `reset_progress` (clears your progress), `unload_playlists`, `forget_my_data`. The
-dashboard opens in your browser (`~/.tailorlist-mcp/overview.html`; set
-`TAILORLIST_OPEN_BROWSER=0` to turn that off) and is also an MCP App, which Claude Desktop can
+## Tools
+
+Available now, grouped by what they do:
+
+- **Setup and data:** `connect_spotify`, `list_my_playlists`, `load_playlists` (playlists and
+  your Liked Songs), `unload_playlists`, `forget_my_data`
+- **Dashboards:** `show_overview`, `show_playlist`, `show_draft`
+- **Questions (data tools):** `library_health` (everything that is off, in one report),
+  `get_playlist_tracks`, `collection_stats`, `find_tracks`,
+  `find_duplicates`, `find_replaced_tracks`, `compare_playlists`, `explain`
+- **Building playlists (drafts):** `group_tracks`, `edit_draft`, `organize_progress`,
+  `reset_progress`, `export_tracks`
+- **Writing to Spotify:** `create_playlist`, `write_draft`, `add_tracks`, `remove_tracks`,
+  `replace_versions`, `sort_playlist`, `dedupe_playlist`, `undo_last_write`, `confirm_write`
+- **Enrichment:** `fill_genres` (MusicBrainz genres for artists Spotify leaves empty, in the
+  background, about 1 request per second), `fill_years` (original release year per song, also
+  from MusicBrainz, about 1.6 seconds per song)
+
+The dashboards open in your browser (`~/.tailorlist-mcp/overview.html`; set
+`TAILORLIST_OPEN_BROWSER=0` to turn that off) and are also an MCP App, which Claude Desktop can
 show inside the chat. Everything is stored in `~/.tailorlist-mcp` (`TAILORLIST_HOME` to change it).
+
+### Writing is safe
+
+- Every write tool only previews. It returns a plan and a code, and changes nothing on Spotify.
+- `confirm_write(code)` is the only tool that writes. In your MCP client, keep `confirm_write`
+  on "ask every time".
+- `undo_last_write` reverts the last add, remove, replace, sort or dedupe. It also works as a preview first:
+  `confirm_write` applies it.
+- Playlists are never deleted by Tailorlist.
+- Playlists created through the API come out public, because Spotify ignores the private flag.
+  You can make them private in the Spotify app.
 
 ## Spotify's terms
 

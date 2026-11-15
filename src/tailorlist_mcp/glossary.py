@@ -54,7 +54,7 @@ TERMS: dict[str, tuple[tuple[str, ...], str]] = {
     "genre diversity": (("diversity",),
         "Genre diversity: distinct genre tags among a playlist's artists."),
     "duplicates": (("duplicate", "different versions", "versions", "remaster"),
-        "Exact duplicate: the same Spotify ID saved more than once (inside one playlist or across playlists). "
+        "Exact duplicate: the same Spotify ID saved more than once (inside one playlist or across playlists; Liked Songs is not counted unless asked for: liking a song that is in a playlist is no duplicate). "
         "Different versions: the same song and primary artist under different IDs (album vs. compilation, "
         "remaster, live...). Version suffixes are ignored when comparing names, so \"Song\", \"Song - Remastered "
         "2009\", \"Song - Live\" and \"Song (Acoustic Version)\" match; remixes count as different songs."),

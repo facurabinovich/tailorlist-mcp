@@ -16,9 +16,17 @@ from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 _ID_RE = re.compile(r"(?:playlist[/:])?([A-Za-z0-9]{22})")
 
 
+def is_liked_ref(ref: str) -> bool:
+    """True for "liked", "Liked Songs" and the Liked Songs link (spaces and case ignored)."""
+    ref = ref.strip().casefold().split("?")[0].rstrip("/")
+    return ref in ("liked", "liked songs", store.LIKED_URL)
+
+
 def playlist_id_from(ref: str) -> str | None:
     """A playlist ID from an ID, a spotify:playlist: URI or an open.spotify.com URL."""
     ref = ref.strip()
+    if is_liked_ref(ref):
+        return None
     m = _ID_RE.search(ref.split("?")[0])
     return m.group(1) if m else None
 
@@ -31,10 +39,30 @@ def _track_total(p: dict) -> int | None:
     return None
 
 
+def _liked_snapshot(total: int, newest: str | None) -> str:
+    return f"{total}:{newest}"
+
+
+def _liked_meta(me: dict, snapshot: str) -> dict:
+    return {"id": store.LIKED_ID, "name": store.LIKED_NAME, "owner": {"id": me.get("id"), "display_name": me.get("display_name")},
+            "snapshot_id": snapshot, "external_urls": {"spotify": store.LIKED_URL}}
+
+
 def list_playlists(client: SpotifyClient, conn: sqlite3.Connection) -> dict:
     me = client.me()
     loaded = store.loaded_snapshots(conn)
-    out = []
+    out, note = [], None
+    try:
+        total, newest = client.saved_summary()
+    except SpotifyError:
+        note = ("Liked Songs could not be read (the login may lack the permission): logging in again with "
+                "connect_spotify may fix it.")
+    else:
+        snap = _liked_snapshot(total, newest)
+        out.append({"id": store.LIKED_ID, "name": store.LIKED_NAME, "tracks": total, "mine": True,
+                    "owner": me.get("display_name") or me.get("id"),
+                    "cache": None if store.LIKED_ID not in loaded else ("current" if loaded[store.LIKED_ID] == snap else "changed"),
+                    "url": store.LIKED_URL})
     for p in client.my_playlists():
         if not p or not p.get("id"):
             continue
@@ -49,7 +77,10 @@ def list_playlists(client: SpotifyClient, conn: sqlite3.Connection) -> dict:
             "cache": None if p["id"] not in loaded else ("current" if cached == p.get("snapshot_id") else "changed"),
             "url": (p.get("external_urls") or {}).get("spotify"),
         })
-    return {"user": me.get("display_name") or me.get("id"), "playlists": out}
+    result = {"user": me.get("display_name") or me.get("id"), "playlists": out}
+    if note:
+        result["note"] = note
+    return result
 
 
 # Parallel Spotify reads. Small enough to stay clear of rate limits; 429s are retried anyway.
@@ -63,6 +94,21 @@ def _fetch_playlist(client: SpotifyClient, pid: str, known_snapshot: str | None,
         return {"meta": meta, "unchanged": True}
     rows, skipped = [], 0
     for item in client.playlist_items(pid):
+        parsed = store.parse_item(item)
+        if parsed is None:
+            skipped += 1
+        else:
+            rows.append(parsed)
+    return {"meta": meta, "unchanged": False, "rows": rows, "skipped": skipped}
+
+
+def _fetch_liked(client: SpotifyClient, known_snapshot: str | None, force: bool) -> dict:
+    """Read Liked Songs (newest first) like _fetch_playlist; its snapshot is "<total>:<newest added_at>"."""
+    meta = _liked_meta(client.me(), _liked_snapshot(*client.saved_summary()))
+    if not force and known_snapshot == meta["snapshot_id"]:
+        return {"meta": meta, "unchanged": True}
+    rows, skipped = [], 0
+    for item in client.saved_tracks():
         parsed = store.parse_item(item)
         if parsed is None:
             skipped += 1
@@ -88,11 +134,12 @@ def load_playlists(
     with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
         futures = {}
         for i, ref in enumerate(refs):
-            pid = playlist_id_from(ref)
+            pid = store.LIKED_ID if is_liked_ref(ref) else playlist_id_from(ref)
             if not pid:
                 results[i] = {"ref": ref, "status": "error", "error": "Not a playlist ID or link."}
                 continue
-            futures[pool.submit(_fetch_playlist, client, pid, known.get(pid), force)] = (i, pid)
+            fetch = (_fetch_liked, client) if pid == store.LIKED_ID else (_fetch_playlist, client, pid)
+            futures[pool.submit(*fetch, known.get(pid), force)] = (i, pid)
         for future in as_completed(futures):
             i, pid = futures[future]
             try:

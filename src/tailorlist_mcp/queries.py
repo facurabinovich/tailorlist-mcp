@@ -18,7 +18,7 @@ import sqlite3
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
-from tailorlist_mcp import dashboard
+from tailorlist_mcp import charts, dashboard
 from tailorlist_mcp.analysis import comparison
 from tailorlist_mcp.analysis.duplicates import song_key
 from tailorlist_mcp.analysis import overview as ov
@@ -295,9 +295,12 @@ def collection_stats(
         return f"{v:.1f}" if metric in ("avg_popularity", "share") else f"{v:.2f}"
 
     names = {"share": "share_%"}
-    header = [group_by] + ([split_by] if split_by else []) + [names.get(m, m) for m in metrics]
+    labels = [names.get(m, m) for m in metrics]
+    header = [group_by] + ([split_by] if split_by else []) + labels + ([] if split_by else ["bar"])
+    top = agg[metrics[0]].max()  # bars are scaled to the biggest value shown
     rows = [
         [_label(group_by, r["_g"])] + ([_label(split_by, r["_s"])] if split_by else []) + [show(m, r[m]) for m in metrics]
+        + ([] if split_by else [charts.bar(r[metrics[0]], top)])
         for _, r in agg.iterrows()
     ]
     title = f"{', '.join(metrics)} by {group_by}" + (f" x {split_by}" if split_by else "")
@@ -305,7 +308,8 @@ def collection_stats(
     if group_by in ("genre", "genre_family") or split_by in ("genre", "genre_family"):
         notes.append("A track counts under every genre/family of its artist, so shares add up to more than 100%.")
     notes.append("unique_tracks, hours and avg_popularity count each Spotify track once per group; entries counts every playlist entry.")
-    return "\n".join([head, _table(header, rows), *notes])
+    hint = charts.stats_hint(group_by, split_by, labels, len(rows), agg["_g"].nunique(), agg["_s"].nunique() if split_by else 0)
+    return "\n".join([head, _table(header, rows), *notes, *([hint] if hint else [])])
 
 
 # ---------------------------------------------------------------- find_tracks
@@ -358,7 +362,8 @@ def find_tracks(
         rows.append(row)
     head = (f"{len(tracks):,} unique tracks match" + (f" ({'; '.join(used)})" if used else " (no filters)")
             + f"; showing {len(shown)}, sorted by {sort} {'ascending' if asc else 'descending'}.")
-    return "\n".join([head, _table(header, rows)])
+    hint = charts.tracks_hint(sort, len(rows))
+    return "\n".join([head, _table(header, rows), *([hint] if hint else [])])
 
 
 # ---------------------------------------------------------------- find_duplicates
@@ -381,9 +386,12 @@ def find_duplicates(
     out = [f"Duplicates in {scope} ({len({r['id'] for r in recs}):,} unique tracks, {len(recs):,} entries)."]
 
     if kind in ("all", "exact"):
-        exact = comparison.exact_duplicates_across_playlists(recs)
+        # Liked Songs only counts when the user names it: liking a song that is in a playlist is no duplicate.
+        counted = recs if playlists else dashboard.without_liked(recs)
+        exact = comparison.exact_duplicates_across_playlists(counted)
         out.append(f"\nExact duplicates: {len(exact)} Spotify tracks saved more than once, across or inside playlists"
-                   + (f" (showing {limit})." if len(exact) > limit else "."))
+                   + (f" (showing {limit})." if len(exact) > limit else ".")
+                   + (" Liked Songs is left out of this count; name it in `playlists` to include it." if len(counted) != len(recs) else ""))
         exact = exact.sort_values(["count", "track_name"], ascending=[False, True]).head(limit)
         out.append(_table(["Track", "Artist", "Times", "Playlists", "Track ID"],
                           [[r.track_name, r.artist_display, r.count, r.playlists, r.track_id] for r in exact.itertuples()]))
@@ -399,6 +407,18 @@ def find_duplicates(
 
 
 # ---------------------------------------------------------------- compare_playlists
+
+def shared_pairs(members: dict[str, set], ordered: list[str]) -> list[tuple[int, str, str]]:
+    """(shared unique tracks, A, B) for every pair of playlists sharing at least one, most shared first."""
+    pairs = []
+    for i, a in enumerate(ordered):
+        for b in ordered[i + 1:]:
+            shared = len(members[a] & members[b])
+            if shared:
+                pairs.append((shared, a, b))
+    pairs.sort(key=lambda p: (-p[0], p[1], p[2]))
+    return pairs
+
 
 def compare_playlists(conn: sqlite3.Connection, playlists: list[str] | None = None) -> str:
     """One row per playlist plus how many tracks each pair shares."""
@@ -428,14 +448,7 @@ def compare_playlists(conn: sqlite3.Connection, playlists: list[str] | None = No
 
     members = {n: set(g["track_id"]) for n, g in df.groupby("playlist_name")}
     others: dict[str, set] = {n: set().union(*(m for k, m in members.items() if k != n)) for n in members}
-    pairs = []
-    ordered = list(table.index)
-    for i, a in enumerate(ordered):
-        for b in ordered[i + 1:]:
-            shared = len(members[a] & members[b])
-            if shared:
-                pairs.append((shared, a, b))
-    pairs.sort(key=lambda p: (-p[0], p[1], p[2]))
+    pairs = shared_pairs(members, list(table.index))
 
     def num(v, fmt="{:.1f}"):
         return "" if pd.isna(v) else fmt.format(v)
@@ -467,6 +480,9 @@ def compare_playlists(conn: sqlite3.Connection, playlists: list[str] | None = No
         out.append("Follower counts aren't cached yet: they are read the next time load_playlists runs.")
     out.append(f"Shared unique tracks per pair ({len(pairs)} pairs share at least one; top {min(len(pairs), 30)}):")
     out.append(_table(["Playlist A", "Playlist B", "Shared"], [[a, b, s] for s, a, b in pairs[:30]]) if pairs else "none")
+    hint = charts.compare_hint(len(table), bool(pairs))
+    if hint:
+        out.append(hint)
     return "\n".join(out)
 
 

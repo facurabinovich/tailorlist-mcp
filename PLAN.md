@@ -191,6 +191,20 @@ account, which he deletes by hand afterwards (the MCP never deletes).
 - Deviations: newly created playlists are not loaded into the cache (they would add their tracks to the
   analysis as duplicates); edited playlists that are in the cache are re-read.
 
+### Editing checks (2026-11-15, real API, scratch playlist `test-tailorlist-scratch`)
+
+For `sort_playlist` and `dedupe_playlist`: what keeps a track's added date.
+
+- **Reorder** (`PUT playlists/{id}/items` with `range_start`, `insert_before`, `range_length`): works,
+  the added date follows the track. One range per call.
+- **Replace items** (`PUT playlists/{id}/items` with `uris`, 100 at most): tracks that stay keep their
+  added date, in any new order. With a duplicate left out, the remaining copy has the EARLIEST of
+  the copies' dates, whichever position it is given.
+- **Removing one copy by position is not possible**: `DELETE` with `positions` and a `snapshot_id`
+  answers 200 and changes nothing; without the `snapshot_id` it removes every copy.
+- `GET me/tracks` (Liked Songs): rows are `{added_at, track}`, newest first, with `total`; popularity
+  and ISRC are filled in.
+
 ## Terms and licences (checked 2026-11-09)
 
 - **Kaggle fallback DB: dropped.** It came from "Spotify 1.2M+ Songs"

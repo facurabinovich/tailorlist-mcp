@@ -16,9 +16,13 @@ are edited. See PLAN.md, "Phase 3 plan".
 Plan shapes (JSON in pending_writes):
   create: {"kind": "create", "draft": {"id", "stamp"} | None, "items": [{"name", "description",
            "ids": [track IDs to write, in order], "pairs": [[draft track ID, written ID]], "group", "keep_visible"}]}
-  add / remove / replace / undo: {"kind", "items": [{"playlist_id", "name", "url", "content", "ops": [...]}]}
+  add / remove / replace / sort / dedupe / undo: {"kind", "items": [{"playlist_id", "name", "url", "content", "ops": [...]}]}
   ops: {"op": "add", "ids", "position"} | {"op": "remove", "ids", "positions": [[pos, id]]} |
        {"op": "replace", "pairs": [[pos, old, new]]} | {"op": "insert", "entries": [[pos, id]]} (undo of remove)
+       {"op": "set", "ids", "was"}: replace the whole playlist (one call, <= 100 tracks); was = the content before
+       {"op": "move", "src", "dst", "moves": [[range_start, insert_before, range_length]]}: block moves from the order
+         src to the order dst (items are track IDs; "~<position>" stands for an item that is not a track)
+       {"op": "dedupe", "out": [ids removed with every copy], "put": [[pos, id]] added back, "was": [[pos, id]] before}
 """
 from __future__ import annotations
 
@@ -31,7 +35,8 @@ import time
 from collections.abc import Callable
 from datetime import date
 
-from tailorlist_mcp import collection, drafts, progress
+from tailorlist_mcp import collection, drafts, progress, store, years
+from tailorlist_mcp.analysis import duplicates
 from tailorlist_mcp.export import track_id_from, track_meta
 from tailorlist_mcp.queries import _table
 from tailorlist_mcp.sources.spotify_api import MAX_PER_CALL, SpotifyClient, SpotifyError
@@ -119,9 +124,16 @@ def _playlist_ref_id(ref: str) -> str | None:
     return (m.group(1) or m.group(0)) if m else None
 
 
+def _refuse_liked(ref: str) -> None:
+    if collection.is_liked_ref(ref):
+        raise WriteError("Liked Songs can't be edited from Tailorlist: it is not a playlist. Its tracks can feed a new "
+                         "playlist (create_playlist, write_draft), but adding or removing there is done in Spotify.")
+
+
 def resolve_playlist(client: SpotifyClient, ref: str, me: dict | None = None) -> dict:
     """A playlist of the user's account by ID, link, name or unique part of a name -> Spotify's
     playlist object. Only the user's own or collaborative playlists can be edited."""
+    _refuse_liked(ref)
     pid = _playlist_ref_id(ref)
     if not pid:
         wanted = ref.strip().casefold()
@@ -153,7 +165,10 @@ def live_rows(client: SpotifyClient, playlist_id: str) -> list[dict]:
         ok = item.get("type", "track") == "track" and not item.get("is_local") and item.get("id")
         rows.append({"pos": pos, "id": item["id"] if ok else None, "name": item.get("name") or "",
                      "artist": ", ".join(a.get("name") or "" for a in item.get("artists") or []),
-                     "album": (item.get("album") or {}).get("name")})
+                     "album": (item.get("album") or {}).get("name"),
+                     "primary": ((item.get("artists") or [{}])[0].get("name") or "") if ok else "",
+                     "popularity": item.get("popularity"), "duration_ms": item.get("duration_ms"),
+                     "release_date": (item.get("album") or {}).get("release_date"), "added_at": row.get("added_at")})
     return rows
 
 
@@ -485,6 +500,8 @@ def replace_versions(conn: sqlite3.Connection, client: SpotifyClient, playlist: 
                      now: int | None = None) -> str:
     """Swap replaced album versions for the version Spotify plays now, in the same position."""
     now = _now(now)
+    if playlist:
+        _refuse_liked(playlist)
     collection.relink_popularity_zero(client, conn, now)   # tracks loaded before the check existed
     replaced = {r["id"]: r for r in conn.execute(
         "SELECT t.id, t.name, t.album, t.current_id, t.current_album FROM tracks t WHERE t.current_id IS NOT NULL")}
@@ -498,6 +515,9 @@ def replace_versions(conn: sqlite3.Connection, client: SpotifyClient, playlist: 
             "SELECT DISTINCT p.id FROM playlists p JOIN playlist_tracks pt ON pt.playlist_id = p.id "
             f"WHERE pt.track_id IN ({','.join('?' * len(replaced))}) ORDER BY p.name", list(replaced))]
     items, lines, notes = [], [], []
+    if not playlist and store.LIKED_ID in candidates:
+        candidates.remove(store.LIKED_ID)
+        notes.append("Liked Songs holds replaced versions too, but it is not a playlist and can't be edited from Tailorlist: skipped.")
     total = same = 0
     for ref in candidates:
         try:
@@ -536,6 +556,237 @@ def replace_versions(conn: sqlite3.Connection, client: SpotifyClient, playlist: 
            _table(["Playlist", "Position", "Track", "Artist", "Saved album", "Current album"], lines[:SHOWN])
            + (f"\n... and {len(lines) - SHOWN} more" if len(lines) > SHOWN else "")] + notes
     return _with_code(conn, {"kind": "replace", "items": items}, "\n".join(out), now, "this preview")
+
+
+# ---------------------------------------------------------------- previews: sort_playlist
+
+SORT_BY = ("year", "artist", "popularity", "added", "name", "duration")
+
+
+def plan_moves(src: list[str], dst: list[str]) -> list[list[int]]:
+    """Block moves [[range_start, insert_before, range_length]] that turn the order src into dst.
+
+    Fixes dst left to right: the next wanted item is found further on and moved to its place together with
+    the longest run that follows it and is also wanted next. Every move fixes at least one position, so
+    there are at most len - 1 moves; one is never a no-op (the block always moves to the left)."""
+    def keyed(seq):                      # repeated IDs: the k-th copy in src is the k-th copy in dst
+        seen: dict[str, int] = {}
+        out = []
+        for k in seq:
+            seen[k] = seen.get(k, 0) + 1
+            out.append((k, seen[k]))
+        return out
+    cur, goal = keyed(src), keyed(dst)
+    if sorted(cur) != sorted(goal):
+        raise ValueError("The two orders don't hold the same items.")
+    moves = []
+    for i in range(len(goal)):
+        if cur[i] == goal[i]:
+            continue
+        k = cur.index(goal[i], i)
+        n = 1
+        while k + n < len(cur) and cur[k + n] == goal[i + n]:
+            n += 1
+        moves.append([k, i, n])
+        cur[i:k + n] = cur[k:k + n] + cur[i:k]     # what Spotify does with insert_before = i < range_start = k
+    return moves
+
+
+def _year_of(known: dict, r: dict) -> int | None:
+    """The year used everywhere: the song's original release when known and earlier, else the album's."""
+    date = years.original_date(known, r["name"], r["primary"], r["album"], r["release_date"]) or r["release_date"]
+    return years.album_year(date)
+
+
+def _sort_key(by: str, r: dict, year: int | None):
+    """What a row is sorted by; None = the row has no value (those go last)."""
+    if by == "year":
+        return year
+    if by == "artist":
+        return ((r["primary"].casefold(), year if year is not None else 9999, (r["album"] or "").casefold(),
+                 r["name"].casefold()) if r["primary"] else None)
+    if by == "name":
+        return r["name"].casefold() or None
+    return r[{"popularity": "popularity", "added": "added_at", "duration": "duration_ms"}[by]]
+
+
+def _sort_value(by: str, r: dict, year: int | None) -> str:
+    v = {"year": year, "artist": year, "popularity": r["popularity"], "added": (r["added_at"] or "")[:10] or None,
+         "name": r["album"], "duration": r["duration_ms"]}[by]
+    if by == "duration" and v is not None:
+        return f"{v // 60000}:{v // 1000 % 60:02d}"
+    return "" if v is None else str(v)
+
+
+def sort_playlist(conn: sqlite3.Connection, client: SpotifyClient, playlist: str, by: str,
+                  descending: bool = False, now: int | None = None) -> str:
+    now = _now(now)
+    by = (by or "").strip().casefold()
+    if by not in SORT_BY:
+        raise WriteError(f"Can't sort by '{by}'. Options: {', '.join(SORT_BY)}.")
+    meta, rows = _live_playlist(client, playlist)
+    known = years.known_years(conn)
+    tracks = [(r, _year_of(known, r)) for r in rows if r["id"]]
+    keyed = [(r, y, _sort_key(by, r, y)) for r, y in tracks]
+    with_value = sorted((t for t in keyed if t[2] is not None), key=lambda t: t[2], reverse=descending)   # stable both ways
+    ordered = with_value + [t for t in keyed if t[2] is None]
+    src = [r["id"] or f"~{r['pos']}" for r in rows]
+    dst = [r["id"] for r, _, _ in ordered] + [f"~{r['pos']}" for r in rows if not r["id"]]
+    where = f'"{meta["name"]}" ({(meta.get("external_urls") or {}).get("spotify") or ""})'
+    if dst == src:
+        return f"Nothing to do: {where} is already in that order ({by}{', descending' if descending else ''}). Nothing changes on Spotify."
+    changed = sum(a != b for a, b in zip(src, dst))
+    if len(rows) <= MAX_PER_CALL and all(r["id"] for r in rows) and len(set(src)) == len(src):
+        op, calls = {"op": "set", "ids": dst, "was": src}, 1
+    else:
+        moves = plan_moves(src, dst)
+        op, calls = {"op": "move", "src": src, "dst": dst, "moves": moves}, len(moves)
+    out = [f"Preview: sort {where} by {by}{', descending' if descending else ''}. {changed} of {len(rows)} items change position; "
+           f"it takes {_n(calls, 'Spotify call', 'Spotify calls')}. Every track keeps its added date."]
+    if by == "artist":
+        out.append("Order: primary artist, then year, then album, then track name. Ties keep their current order.")
+    else:
+        out.append("Ties keep their current order; tracks without a value go last.")
+    if len(ordered) < len(rows):
+        out.append(f"{len(rows) - len(ordered)} items are not tracks (episodes, local files): they stay together, in order, at the end.")
+    label = {"year": "Year", "artist": "Year", "popularity": "Popularity", "added": "Added", "name": "Album", "duration": "Duration"}[by]
+    shown = [[i, r["name"], r["primary"], _sort_value(by, r, y)] for i, (r, y, _) in enumerate(ordered[:SHOWN], 1)]
+    out.append(_table(["#", "Track", "Artist", label], shown) + (f"\n... and {len(ordered) - SHOWN} more" if len(ordered) > SHOWN else ""))
+    return _with_code(conn, {"kind": "sort", "items": [_item(meta, rows, [op])]}, "\n".join(out), now, "this preview")
+
+
+# ---------------------------------------------------------------- previews: dedupe_playlist
+
+_VERSION_RULES = ("most_popular", "earliest_added")
+_DEDUPE_HELP = ("\nNo confirmation code yet: ask the user which version of each song stays, then call dedupe_playlist again with "
+                "keep=[track IDs, one per song] and/or versions_rule=\"most_popular\" or \"earliest_added\" (applied to the songs "
+                "keep doesn't cover). Songs without a decision are left untouched.")
+
+
+def _version_groups(rows: list[dict]) -> list[dict]:
+    """Songs in the playlist under several IDs (same song and primary artist, as find_duplicates kind=versions)."""
+    by_song: dict[tuple[str, str], list[dict]] = {}
+    for r in rows:
+        if r["id"] and r["name"] and r["primary"]:
+            by_song.setdefault((duplicates.song_key(r["name"]), r["primary"]), []).append(r)
+    out = []
+    for (_, artist), rs in by_song.items():
+        ids = list(dict.fromkeys(r["id"] for r in rs))
+        if len(ids) > 1:
+            out.append({"song": duplicates.strip_version_suffix(rs[0]["name"]), "artist": artist, "ids": ids,
+                        "copies": {i: [r for r in rs if r["id"] == i] for i in ids}})
+    return out
+
+
+def _version_row(known: dict, g: dict, i: int) -> list:
+    copies = g["copies"][i]
+    added = min((r["added_at"] for r in copies if r["added_at"]), default="")
+    return [copies[0]["name"], copies[0]["album"] or "", _year_of(known, copies[0]) or "", copies[0]["popularity"],
+            added[:10], i]
+
+
+def _pick_version(g: dict, keep: set[str], rule: str | None) -> str | None:
+    chosen = [i for i in g["ids"] if i in keep]
+    if len(chosen) > 1:
+        raise WriteError(f'"{g["song"]}" - {g["artist"]}: keep names {len(chosen)} versions of the same song; keep one.')
+    if chosen:
+        return chosen[0]
+    first = lambda i: g["copies"][i][0]["pos"]
+    if rule == "most_popular":
+        return min(g["ids"], key=lambda i: (-(g["copies"][i][0]["popularity"] or 0), first(i)))
+    if rule == "earliest_added":
+        return min(g["ids"], key=lambda i: (min((r["added_at"] for r in g["copies"][i] if r["added_at"]), default="9999"), first(i)))
+    return None
+
+
+def _version_question(known: dict, groups: list[dict]) -> str:
+    out = [f"{_n(len(groups), 'song is', 'songs are')} in the playlist under several versions; which one stays is the user's call."]
+    for n, g in enumerate(groups[:SHOWN], 1):
+        out.append(f'{n}. "{g["song"]}" - {g["artist"]}\n'
+                   + _table(["Track", "Album", "Year", "Popularity", "Added", "ID"], [_version_row(known, g, i) for i in g["ids"]]))
+    if len(groups) > SHOWN:
+        out.append(f"... and {len(groups) - SHOWN} more songs")
+    return "\n".join(out)
+
+
+def dedupe_playlist(conn: sqlite3.Connection, client: SpotifyClient, playlist: str, kind: str = "all",
+                    keep: list[str] | None = None, versions_rule: str | None = None, now: int | None = None) -> str:
+    now = _now(now)
+    if kind not in ("all", "exact", "versions"):
+        raise WriteError('kind must be "all", "exact" or "versions".')
+    if versions_rule not in (None, *_VERSION_RULES):
+        raise WriteError('versions_rule must be "most_popular" or "earliest_added".')
+    if kind == "exact" and (keep or versions_rule):
+        raise WriteError('keep and versions_rule only apply to versions: use kind="versions" or "all".')
+    keep_ids = set(parse_track_ids(keep or []))
+    meta, rows = _live_playlist(client, playlist)
+    known = years.known_years(conn)
+    where = f'"{meta["name"]}" ({(meta.get("external_urls") or {}).get("spotify") or ""})'
+    groups = _version_groups(rows) if kind != "exact" else []
+    stray = keep_ids - {i for g in groups for i in g["ids"]}
+    if stray:
+        raise WriteError("These IDs are not versions of a song that is in the playlist under several IDs: " + ", ".join(sorted(stray)))
+    decided, undecided = [], []         # decided: (group, ID that stays)
+    for g in groups:
+        pick = _pick_version(g, keep_ids, versions_rule)
+        (decided if pick else undecided).append((g, pick) if pick else g)
+    vrem = [i for g, pick in decided for i in g["ids"] if i != pick]
+    gone = set(vrem)
+    counts: dict[str, int] = {}
+    for r in rows:
+        if r["id"] and r["id"] not in gone:
+            counts[r["id"]] = counts.get(r["id"], 0) + 1
+    exact_ids = [i for i, c in counts.items() if c > 1] if kind != "versions" else []
+    if not exact_ids and not vrem:
+        if undecided:
+            return f"Nothing can be removed without a decision in {where}.\n" + _version_question(known, undecided) + "\n" + _DEDUPE_HELP
+        return f"No duplicates in {where}" + (" (kind: " + kind + ")" if kind != "all" else "") + ". Nothing changes on Spotify."
+    exact_set = set(exact_ids)
+    final, seen = [], set()
+    for r in rows:
+        if r["id"] in gone or (r["id"] in exact_set and r["id"] in seen):
+            continue
+        seen.add(r["id"])
+        final.append(r["id"])
+    small = len(rows) <= MAX_PER_CALL and all(r["id"] for r in rows)
+    pos_of = {}
+    for r in rows:
+        pos_of.setdefault(r["id"], []).append(r["pos"])
+    if exact_ids and small:
+        op = {"op": "set", "ids": final, "was": [r["id"] for r in rows]}
+    elif exact_ids:
+        every = exact_set | gone
+        out_ids = list(dict.fromkeys(r["id"] for r in rows if r["id"] in every))
+        op = {"op": "dedupe", "out": out_ids, "put": [[n, i] for n, i in enumerate(final) if i in exact_set],
+              "was": sorted([p, i] for i in out_ids for p in pos_of[i])}
+    else:
+        op = {"op": "remove", "ids": vrem, "positions": sorted([p, i] for i in vrem for p in pos_of[i])}
+    calls = _planned_calls([op])
+    info = {r["id"]: r for r in reversed(rows) if r["id"]}
+    out = [f"Preview: remove duplicates from {where}. {len(rows)} items now, {len(final)} after; it takes {_n(calls, 'Spotify call', 'Spotify calls')}."]
+    if exact_ids:
+        out.append(f"Exact duplicates: {_n(len(exact_ids), 'track is', 'tracks are')} in the playlist more than once "
+                   f"({sum(counts[i] - 1 for i in exact_ids)} extra copies go). One copy stays, at the position of the first one.\n"
+                   + _table(["Track", "Artist", "Copies", "Positions"],
+                            [[info[i]["name"], info[i]["primary"], counts[i], ", ".join(map(str, pos_of[i]))] for i in exact_ids[:SHOWN]])
+                   + (f"\n... and {len(exact_ids) - SHOWN} more" if len(exact_ids) > SHOWN else ""))
+        if op["op"] == "set":
+            out.append("Added dates: the copy that stays shows the earliest added date of its copies.")
+        else:
+            out.append("WARNING, added dates: Spotify can't remove a single copy, so these tracks are removed completely and added back once "
+                       f"in the first copy's position. They will show TODAY as their added date ({len(exact_ids)}): "
+                       + "; ".join(f"{info[i]['name']} - {info[i]['primary']}" for i in exact_ids[:SHOWN])
+                       + (f"; ... and {len(exact_ids) - SHOWN} more" if len(exact_ids) > SHOWN else ""))
+    if decided:
+        rows_t = [[g["song"], "KEEP" if i == pick else "remove", *_version_row(known, g, i)[1:]]
+                  for g, pick in decided for i in g["ids"]]
+        out.append(f"Different versions: {_n(len(decided), 'song', 'songs')} keep one version, {_n(len(vrem), 'version goes', 'versions go')} "
+                   "(every copy of it). Removing another version doesn't touch the added date of anything else.\n"
+                   + _table(["Song", "Action", "Album", "Year", "Popularity", "Added", "ID"], rows_t[:SHOWN])
+                   + (f"\n... and {len(rows_t) - SHOWN} more rows" if len(rows_t) > SHOWN else ""))
+    if undecided:
+        out.append("LEFT UNTOUCHED, they need a decision:\n" + _version_question(known, undecided) + _DEDUPE_HELP)
+    return _with_code(conn, {"kind": "dedupe", "items": [_item(meta, rows, [op])]}, "\n".join(out), now, "this preview")
 
 
 # ---------------------------------------------------------------- running ops (the only Spotify writes)
@@ -587,6 +838,18 @@ def run_op(client: SpotifyClient, pid: str, op: dict, record: Callable[[dict], N
             _add(client, pid, ids, start + len(ids) + inserted, record)
             inserted += len(ids)
         _remove(client, pid, list(dict.fromkeys(old for _, old, _ in op["pairs"])), record)
+    elif kind == "set":
+        snap = client.replace_items(pid, [uri(t) for t in op["ids"]])
+        record({"call": "replace", "tracks": len(op["ids"]), "ids": op["ids"], "snapshot_id": snap})
+    elif kind == "move":
+        for start, before, n in op["moves"]:
+            snap = client.reorder_items(pid, start, before, n)
+            record({"call": "move", "tracks": n, "position": before, "snapshot_id": snap})
+    elif kind == "dedupe":
+        # Spotify can't remove one copy: remove every copy, then add one back where the first copy was.
+        _remove(client, pid, op["out"], record)
+        for start, ids in _runs(op["put"]):
+            _add(client, pid, ids, start, record)
     else:
         raise WriteError(f"Unknown operation {kind!r}.")
 
@@ -604,6 +867,12 @@ def _planned_calls(ops: list[dict]) -> int:
         elif k == "replace":
             n += sum(-(-len(ids) // MAX_PER_CALL) for _, ids in _runs([[p, nw] for p, _, nw in op["pairs"]]))
             n += -(-len({o for _, o, _ in op["pairs"]}) // MAX_PER_CALL)
+        elif k == "set":
+            n += 1
+        elif k == "move":
+            n += len(op["moves"])
+        elif k == "dedupe":
+            n += -(-len(op["out"]) // MAX_PER_CALL) + sum(-(-len(ids) // MAX_PER_CALL) for _, ids in _runs(op["put"]))
     return n
 
 
@@ -614,6 +883,12 @@ def _inverse(op: dict) -> dict:
         return {"op": "insert", "entries": op["positions"]}
     if op["op"] == "replace":
         return {"op": "replace", "pairs": [[pos, new, old] for pos, old, new in op["pairs"]]}
+    if op["op"] == "set":
+        return {"op": "set", "ids": op["was"], "was": op["ids"]}
+    if op["op"] == "move":
+        return {"op": "move", "src": op["dst"], "dst": op["src"], "moves": plan_moves(op["dst"], op["src"])}
+    if op["op"] == "dedupe":
+        return {"op": "dedupe", "out": list(dict.fromkeys(i for _, i in op["put"])), "put": op["was"], "was": op["put"]}
     raise WriteError("This write can't be undone.")
 
 
@@ -621,6 +896,21 @@ def _inverse(op: dict) -> dict:
 
 def _batch_lines(batches: list[dict]) -> str:
     return "; ".join(f"{b['call']} {b['tracks']}" + (f" at {b['position']}" if b.get("position") is not None else "") for b in batches)
+
+
+def _partial_hint(ops: list[dict], batches: list[dict]) -> str:
+    if any(op["op"] == "move" for op in ops):
+        return (f"{len(batches)} moves were done; nothing is lost, the playlist is just partly reordered. "
+                "A new sort_playlist preview finishes the job.")
+    for op in ops:
+        if op["op"] == "dedupe":
+            removed = {i for b in batches if b["call"] == "remove" for i in b["ids"]}
+            back = {i for b in batches if b["call"] == "add" for i in b["ids"]}
+            lost = [i for _, i in op["put"] if i in removed and i not in back]
+            if lost:
+                return (f"{len(lost)} tracks were removed and NOT put back yet (add them again with add_tracks): "
+                        + ", ".join(lost[:10]) + (" ..." if len(lost) > 10 else "") + ".")
+    return "Look at the playlist before trying again."
 
 
 def _check_unchanged(client: SpotifyClient, conn: sqlite3.Connection, plan: dict) -> None:
@@ -635,7 +925,7 @@ def _check_unchanged(client: SpotifyClient, conn: sqlite3.Connection, plan: dict
 
 
 def _reload(client, conn, playlist_ids: list[str]) -> str:
-    cached = [p for p in playlist_ids if conn.execute("SELECT 1 FROM playlists WHERE id = ?", (p,)).fetchone()]
+    cached = [p for p in playlist_ids if p != store.LIKED_ID and conn.execute("SELECT 1 FROM playlists WHERE id = ?", (p,)).fetchone()]
     if not cached:
         return ""
     try:
@@ -728,7 +1018,7 @@ def _confirm_edit(client, conn, plan: dict, op_id: str, now: int) -> str:
             stopped = True
             _log_end(conn, row, "partial" if batches else "failed")
             results.append(f'"{item["name"]}": INCOMPLETE, {len(batches)} of {_planned_calls(ops)} calls went through '
-                           f"({_batch_lines(batches) or 'none'}). Failed: {exc}. Look at the playlist before trying again.")
+                           f"({_batch_lines(batches) or 'none'}). Failed: {exc}. {_partial_hint(ops, batches)}")
         else:
             _log_end(conn, row, "done", content_hash(live_rows(client, item["playlist_id"])))
             results.append(f'"{item["name"]}": {_describe_done(ops)} ({len(batches)} calls). {item.get("url") or ""}')
@@ -753,13 +1043,19 @@ def _describe_done(ops: list[dict]) -> str:
             parts.append(f"put back {len(op['entries'])} tracks")
         elif k == "replace":
             parts.append(f"swapped {len(op['pairs'])} tracks")
+        elif k == "set":
+            parts.append(f"rewrote the playlist with {len(op['ids'])} tracks (was {len(op['was'])})")
+        elif k == "move":
+            parts.append(f"reordered {len(op['dst'])} items in {len(op['moves'])} moves")
+        elif k == "dedupe":
+            parts.append(f"removed {len(op['out'])} tracks and put {len(op['put'])} back once")
     return ", ".join(parts)
 
 
 # ---------------------------------------------------------------- undo
 
 def undo_last_write(conn: sqlite3.Connection, client: SpotifyClient, now: int | None = None) -> str:
-    """Preview reverting the last confirmed add, remove or replace (all its playlists)."""
+    """Preview reverting the last confirmed add, remove, replace, sort or dedupe (all its playlists)."""
     now = _now(now)
     last = conn.execute("SELECT op_id, kind FROM writes ORDER BY id DESC LIMIT 1").fetchone()
     if not last:
@@ -789,6 +1085,9 @@ def undo_last_write(conn: sqlite3.Connection, client: SpotifyClient, now: int | 
         for op in it["ops"]:
             what.append({"remove": f"remove {len(op.get('ids') or [])} tracks that were added",
                          "insert": f"put back {len(op.get('entries') or [])} removed tracks in their old positions",
-                         "replace": f"swap {len(op.get('pairs') or [])} tracks back to the saved versions"}[op["op"]])
+                         "replace": f"swap {len(op.get('pairs') or [])} tracks back to the saved versions",
+                         "set": f"rewrite the playlist with its previous {len(op.get('ids') or [])} tracks",
+                         "move": f"put the previous order back ({len(op.get('moves') or [])} moves)",
+                         "dedupe": f"put back {len(op.get('put') or [])} tracks in their old positions"}[op["op"]])
         out.append(f'- "{it["name"]}": ' + "; ".join(what))
     return _with_code(conn, {"kind": "undo", "of_op": last["op_id"], "items": items}, "\n".join(out), now, "this preview")
