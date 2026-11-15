@@ -151,9 +151,24 @@ def access_token() -> str:
 
 # ---------------------------------------------------------------- login server
 
-_PAGE = """<!doctype html><meta charset="utf-8"><title>Tailorlist</title>
-<body style="font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem">
-<h1>{title}</h1><p>{body}</p></body>"""
+# Same look as ui/setup.html (the result pages follow it in the guided setup).
+_PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Tailorlist</title>
+<style>
+  html, body {{ margin:0; background:#121212; color:#fff;
+    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }}
+  body {{ padding:20px 18px 40px; max-width:720px; margin:0 auto; line-height:1.5; }}
+  .brand {{ border-bottom:1px solid #333; padding-bottom:12px; margin-bottom:18px; }}
+  .wordmark {{ font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }}
+  .wordmark span {{ color:#8FBF7A; }}
+  .card {{ background:#282828; border:1px solid #1DB954; border-radius:14px; padding:18px 20px; }}
+  h1 {{ font-size:1.3rem; margin:0 0 6px; }}
+  p {{ margin:0; color:#B3B3B3; }}
+  p + p {{ margin-top:12px; }}
+  a {{ color:#1DB954; }}
+</style>
+<body><div class="brand"><span class="wordmark">tailor<span>list</span></span></div>
+<div class="card"><h1>{title}</h1><p>{body}</p></div></body></html>"""
 
 
 class LoginSession:

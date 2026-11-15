@@ -53,7 +53,7 @@ def render_page(redirect_uri: str, token: str, error: str = "", value: str = "")
 
 
 def _result_page(title: str, body: str, back: bool) -> str:
-    link = '<p><a href="/setup">Back to the setup page</a></p>' if back else ""
+    link = '</p><p><a href="/setup">Back to the setup page</a>' if back else ""     # its own paragraph inside the card
     return spotify_auth._PAGE.format(title=title, body=body + link)
 
 
