@@ -196,3 +196,12 @@ def test_track_table_missing_popularity_value_raises(p1):
         pdc.track_table(bad)
 
 
+
+
+def test_header_kpis_ignores_rows_without_a_date_in_an_object_column():
+    # What pandas builds without pyarrow: strings as objects, missing dates as NaN.
+    df = pd.DataFrame({"artist_name": ["a", "b", "c"],
+                       "added_at": pd.Series([float("nan"), "2024-02-01T00:00:00Z", "2024-05-03T00:00:00Z"], dtype=object)})
+    k = pdc.header_kpis(df, 0)
+    assert (k.first_added, k.last_added) == ("Feb 2024", "May 03, 2024")
+    assert pdc.header_kpis(df.assign(added_at=pd.Series([None] * 3, dtype=object)), 0).first_added == "N/A"

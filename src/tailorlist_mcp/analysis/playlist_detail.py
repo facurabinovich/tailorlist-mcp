@@ -176,9 +176,12 @@ def header_kpis(pl_df: pd.DataFrame, followers: int) -> HeaderKpis:
         HeaderKpis. first_added / last_added use the min / max of added_at as given (string
         or datetime), so ISO-like strings order correctly.
     """
-    if "added_at" in pl_df.columns:
-        first_added = pd.to_datetime(pl_df["added_at"].min()).strftime("%b %Y")
-        last_added = pd.to_datetime(pl_df["added_at"].max()).strftime("%b %d, %Y")
+    # Rows without a date are dropped first: min() of an object column mixing strings and NaN raises
+    # (pandas without pyarrow keeps strings as objects).
+    added = pl_df["added_at"].dropna() if "added_at" in pl_df.columns else pd.Series(dtype=object)
+    if len(added):
+        first_added = pd.to_datetime(added.min()).strftime("%b %Y")
+        last_added = pd.to_datetime(added.max()).strftime("%b %d, %Y")
     else:
         first_added = "N/A"
         last_added = "N/A"
