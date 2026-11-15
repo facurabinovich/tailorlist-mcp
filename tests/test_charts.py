@@ -64,8 +64,8 @@ def test_stats_hint_share_genre_and_metric_labels():
     assert "no pie chart" not in H("genre", metrics=("unique_tracks",))
     assert "no pie chart" not in H("decade", metrics=("share_%",))
     h = H("decade", metrics=("share_%", "hours"))
-    assert "y = share_%" in h and "Chart share_%; mention the other metrics" in h
-    assert "mention the other metrics" not in H("decade", metrics=("hours",))
+    assert "y = share_%" in h and "Mention the other metrics" in h
+    assert "Mention the other metrics" not in H("decade", metrics=("hours",))
 
 
 def test_stats_hint_shape():
@@ -84,7 +84,7 @@ def test_collection_stats_bar_column_and_hint(conn):
 
 def test_collection_stats_bar_follows_first_metric(conn):
     out = queries.collection_stats(conn, "playlist", metrics=["hours", "unique_tracks"]).splitlines()
-    assert "value = hours" in out[-1] and "mention the other metrics" in out[-1]
+    assert "value = hours" in out[-1] and "Mention the other metrics" in out[-1]
     assert out[1] == "playlist | hours | unique_tracks | bar"
 
 

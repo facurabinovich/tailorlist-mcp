@@ -63,7 +63,7 @@ def stats_hint(group_by: str, split_by: str | None, metrics: list[str], n_rows: 
     if first == "share_%" and ("genre" in (group_by, split_by) or "genre_family" in (group_by, split_by)):
         parts.append("Shares overlap (a track has several genres), so no pie chart.")
     if len(metrics) > 1:
-        parts.append(f"Chart {first}; mention the other metrics in the text.")
+        parts.append("Mention the other metrics in the text.")
     # A split table has no bar column (see collection_stats).
     return _finish(parts, FALLBACK_TABLE_ONLY if split_by else FALLBACK_WITH_BARS)
 
