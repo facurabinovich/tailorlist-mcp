@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import json
 import secrets
 import threading
@@ -20,7 +21,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from tailorlist_mcp import settings
+from tailorlist_mcp import settings, theme
 
 AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -151,24 +152,12 @@ def access_token() -> str:
 
 # ---------------------------------------------------------------- login server
 
-# Same look as ui/setup.html (the result pages follow it in the guided setup).
-_PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Tailorlist</title>
-<style>
-  html, body {{ margin:0; background:#121212; color:#fff;
-    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }}
-  body {{ padding:20px 18px 40px; max-width:720px; margin:0 auto; line-height:1.5; }}
-  .brand {{ border-bottom:1px solid #333; padding-bottom:12px; margin-bottom:18px; }}
-  .wordmark {{ font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }}
-  .wordmark span {{ color:#8FBF7A; }}
-  .card {{ background:#282828; border:1px solid #1DB954; border-radius:14px; padding:18px 20px; }}
-  h1 {{ font-size:1.3rem; margin:0 0 6px; }}
-  p {{ margin:0; color:#B3B3B3; }}
-  p + p {{ margin-top:12px; }}
-  a {{ color:#1DB954; }}
-</style>
-<body><div class="brand"><span class="wordmark">tailor<span>list</span></span></div>
-<div class="card"><h1>{title}</h1><p>{body}</p></div></body></html>"""
+def result_page(title: str, body: str, extra_html: str = "") -> str:
+    """The page the browser shows after the Spotify redirect (and the setup page's errors).
+    Green card for "Connected", red for anything else. Goes through theme.simple_page."""
+    paragraph = f"<p>{html.escape(body)}</p>" if body else ""
+    return theme.simple_page("Spotify login", title, paragraph + extra_html,
+                             tone="ok" if title == "Connected" else "error")
 
 
 class LoginSession:
@@ -198,12 +187,12 @@ class LoginSession:
                 self._reply(200, title, body)
 
             def _reply(self, status: int, title: str, body: str) -> None:
-                html = _PAGE.format(title=title, body=body).encode("utf-8")
+                page = result_page(title, body).encode("utf-8")
                 self.send_response(status)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(html)))
+                self.send_header("Content-Length", str(len(page)))
                 self.end_headers()
-                self.wfile.write(html)
+                self.wfile.write(page)
 
             def log_message(self, *args):  # keep stdout clean: it is the MCP channel
                 pass

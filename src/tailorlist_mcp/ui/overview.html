@@ -1,75 +1,12 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  :root {
-    --bg:#121212; --panel:#181818; --card:#282828; --line:#333; --text:#fff; --muted:#B3B3B3;
-    --dim:#888; --accent:#1DB954; --brand:#8FBF7A;
-  }
-  * { box-sizing:border-box; }
-  html, body { margin:0; background:var(--bg); color:var(--text);
-    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { padding:20px 18px 16px; }
-  a { color:inherit; text-decoration:none; cursor:pointer; }
-  a:hover { text-decoration:underline; }
-  .brand { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:6px 16px;
-    border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:18px; }
-  .wordmark { font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }
-  .wordmark span { color:var(--brand); }
-  .tagline { color:var(--dim); font-size:.88rem; font-style:italic; margin-left:10px; }
-  .title { color:var(--muted); font-size:.8rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
-  .loaded { color:var(--muted); font-size:.82rem; margin:-8px 0 16px; }
-  .grid { display:grid; gap:10px; }
-  .kpis { grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
-  .two { grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; min-width:0; }
-  .icon { font-size:1.3rem; }
-  .label { color:var(--muted); font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
-  .value { font-size:1.75rem; font-weight:800; line-height:1.1; margin-top:6px; }
-  .sub { color:var(--muted); font-size:.75rem; margin-top:2px; }
-  .big { font-size:1.15rem; font-weight:800; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .year { color:var(--accent); font-weight:700; margin-top:6px; }
-  .stats { display:flex; flex-wrap:wrap; gap:14px 40px; }
-  .stats .v { font-size:1.15rem; font-weight:800; color:var(--accent); }
-  h2 { font-size:1.1rem; margin:26px 0 4px; }
-  .hint { color:var(--muted); font-size:.8rem; margin:0 0 12px; }
-  .bars .row { display:grid; grid-template-columns:minmax(90px, 32%) 1fr 48px; gap:10px; align-items:center;
-    font-size:.82rem; padding:3px 0; }
-  .bars .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .bars .track { background:var(--line); border-radius:4px; height:10px; }
-  .bars .fill { background:var(--accent); border-radius:4px; height:10px; }
-  .bars .num { text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .cols { display:flex; align-items:flex-end; gap:6px; height:170px; padding-top:18px; }
-  .cols .col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
-  .cols .bar { width:100%; background:var(--accent); border-radius:5px 5px 0 0; min-height:2px; position:relative; }
-  .cols .bar span { position:absolute; top:-17px; left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--muted); white-space:nowrap; }
-  .cols .lab { font-size:.7rem; color:var(--muted); margin-top:6px; white-space:nowrap; }
-  .cols.dense .lab { font-size:.6rem; }
-  .rank { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:8px; }
-  .rank .top { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
-  .rank .top .v { color:var(--accent); font-weight:800; }
-  .rank .meter { background:var(--line); border-radius:4px; height:5px; margin:8px 0 5px; }
-  .rank .meter div { background:var(--accent); height:5px; border-radius:4px; }
-  .rank .foot { color:var(--muted); font-size:.75rem; }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { border-radius:999px; padding:5px 11px; font-size:.78rem; border:1px solid var(--line); }
-  .chip b { font-weight:700; margin-left:4px; color:var(--muted); }
-  table { width:100%; border-collapse:collapse; font-size:.8rem; }
-  th { text-align:left; color:var(--muted); font-weight:600; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--line); }
-  td { padding:6px 8px; border-bottom:1px solid #222; vertical-align:top; }
-  .timeline { width:100%; height:150px; display:block; }
-  .foot-note { color:var(--dim); font-size:.72rem; margin-top:26px; border-top:1px solid var(--line); padding-top:10px; }
-  .empty { color:var(--muted); padding:30px 0; text-align:center; }
-</style>
+<!--TAILORLIST_HEAD-->
 </head>
 <body>
-<div class="brand">
-  <div><span class="wordmark">Tailorlist<span>.</span></span><span class="tagline">Music, made to measure.</span></div>
-  <div class="title">Collection overview</div>
-</div>
+<!--TAILORLIST_BRAND-->
 <div id="app"><div class="empty">Loading your collection…</div></div>
+<!--TAILORLIST_FOOTER-->
 <script id="tailorlist-data" type="application/json">null</script>
 <script>
 (() => {
@@ -132,6 +69,7 @@
      <div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
 
   function bars(items, nameOf, valueOf, urlOf) {
+    items = [...items].sort((a, b) => valueOf(b) - valueOf(a));
     const max = Math.max(1, ...items.map(valueOf));
     return `<div class="bars">${items.map((it) => `
       <div class="row"><div class="name" title="${esc(nameOf(it))}">${link(nameOf(it), urlOf && urlOf(it))}</div>
@@ -141,8 +79,9 @@
 
   function columns(items, labelOf, valueOf, dense) {
     const max = Math.max(1, ...items.map(valueOf));
+    const labels = items.length <= 12;
     return `<div class="cols${dense ? " dense" : ""}">${items.map((it) => `
-      <div class="col"><div class="bar" style="height:${(valueOf(it) / max * 100).toFixed(1)}%"><span>${fmt(valueOf(it))}</span></div>
+      <div class="col" title="${esc(labelOf(it))}: ${fmt(valueOf(it))}"><div class="bar" style="height:${(valueOf(it) / max * 100).toFixed(1)}%">${labels ? `<span>${fmt(valueOf(it))}</span>` : ""}</div>
       <div class="lab">${esc(labelOf(it))}</div></div>`).join("")}</div>`;
   }
 
@@ -157,8 +96,8 @@
   function genreChips(genres) {
     const max = Math.max(1, ...genres.map((g) => g.tracks));
     return `<div class="chips">${genres.map((g) => {
-      const a = 0.12 + 0.6 * (g.tracks / max);
-      return `<span class="chip" style="background:rgba(29,185,84,${a.toFixed(2)})">${esc(g.genre)}<b>${fmt(g.tracks)}</b></span>`;
+      const a = 0.1 + 0.45 * (g.tracks / max);
+      return `<span class="chip heat" style="--a:${a.toFixed(2)}">${esc(g.genre)}<b>${fmt(g.tracks)}</b></span>`;
     }).join("")}</div>`;
   }
 
@@ -172,8 +111,8 @@
     const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${h - pad} L${pad},${h - pad} Z`;
     const first = points[0].month, last = points[points.length - 1].month;
     return `<svg class="timeline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-      <path d="${area}" fill="rgba(29,185,84,.18)"/><path d="${line}" fill="none" stroke="#1DB954" stroke-width="2" vector-effect="non-scaling-stroke"/>
-      </svg><div class="sub" style="display:flex;justify-content:space-between"><span>${esc(first)}</span><span>peak ${fmt(max)} tracks in a month</span><span>${esc(last)}</span></div>`;
+      <path class="tl-area" d="${area}"/><path class="tl-line" d="${line}" vector-effect="non-scaling-stroke"/>
+      </svg><div class="sub axis"><span>${esc(first)}</span><span>peak ${fmt(max)} tracks in a month</span><span>${esc(last)}</span></div>`;
   }
 
   function dupTable(items, cols) {
@@ -219,9 +158,9 @@
     }
     if (li) {
       html += `<div class="card" style="margin-top:10px"><div class="stats">
-        <div><div class="label">Median era</div><div class="v">${li.median_year}</div></div>
-        <div><div class="label">Span</div><div class="v" style="color:#fff">${li.span} yrs</div></div>
-        <div><div class="label">Listening age</div><div class="v">${li.listening_age} yrs</div></div>
+        <div><div class="label">Median era</div><div class="v hot">${li.median_year}</div></div>
+        <div><div class="label">Span</div><div class="v">${li.span} yrs</div></div>
+        <div><div class="label">Listening age</div><div class="v hot">${li.listening_age} yrs</div></div>
         </div><div class="sub" style="margin-top:8px">Median era ${li.median_year} · est. born ${li.est_birth} · Listening Age ${li.listening_age} yrs</div></div>`;
     }
 
@@ -250,7 +189,7 @@
       const maxT = Math.max(...data.top_albums.map((a) => a.tracks));
       const al = data.top_albums.map((a) => ({ ...a, _bar: a.tracks }));
       html += `<div><h2>💿 Favourite albums</h2><p class="hint">Most tracks saved from one album.</p>
-        ${ranking(al, (a) => esc(a.album), (a) => esc(a.artist), (a) => `${a.tracks} tracks`, (a) => `avg popularity ${a.popularity}`, maxT)}</div>`;
+        ${ranking(al, (a) => esc(a.album), (a) => esc(a.artist), (a) => `${a.tracks} track${a.tracks === 1 ? "" : "s"}`, (a) => `avg popularity ${a.popularity}`, maxT)}</div>`;
     }
     html += `</div>`;
 
@@ -274,7 +213,7 @@
           <div style="margin-top:10px">${dupTable(d.versions.items, [["Track", "track"], ["Artist", "artist"], ["Saved in", "playlists"]])}</div></div>
       </div>`;
 
-    html += `<div class="foot-note">Data from Spotify. Names link to Spotify.</div>`;
+    html += ``;
     app.innerHTML = html;
     reportSize();
   }

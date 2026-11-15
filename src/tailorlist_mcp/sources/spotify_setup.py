@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from tailorlist_mcp import settings, setup_guide
+from tailorlist_mcp import settings, setup_guide, theme
 from tailorlist_mcp.sources import spotify_auth
 
 _TEMPLATE = Path(__file__).parent.parent / "ui" / "setup.html"
@@ -49,12 +49,13 @@ def render_page(redirect_uri: str, token: str, error: str = "", value: str = "")
         "TROUBLE": "".join(f"<li>{_inline(t)}</li>" for t in setup_guide.troubleshooting()),
     }
     template = _TEMPLATE.read_text(encoding="utf-8")
-    return re.sub(r"\{\{(\w+)\}\}", lambda m: values.get(m.group(1), ""), template)
+    page = re.sub(r"\{\{(\w+)\}\}", lambda m: values.get(m.group(1), ""), template)
+    return theme.inline(page, theme.PAGES["setup"])
 
 
 def _result_page(title: str, body: str, back: bool) -> str:
-    link = '</p><p><a href="/setup">Back to the setup page</a>' if back else ""     # its own paragraph inside the card
-    return spotify_auth._PAGE.format(title=title, body=body + link)
+    link = '<p><a href="/setup">Back to the setup page</a></p>' if back else ""
+    return spotify_auth.result_page(title, body, link)
 
 
 class SetupSession:

@@ -18,7 +18,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
 from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, drafts, export, genre_fill, glossary,
-                            health, menu, merge_split, orphans, progress, years, queries, settings, setup_guide, store, write)
+                            health, menu, merge_split, orphans, progress, years, queries, settings, setup_guide, store, theme,
+                            write)
 from tailorlist_mcp.sources import spotify_auth, spotify_setup
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -36,7 +37,7 @@ Analyze: dashboards (show_overview, show_playlist, show_draft) open in the user'
 after one opens, add a short comment and suggest what to look at next — don't repeat its
 numbers. For questions use the data tools (library_health, collection_stats, find_tracks,
 find_duplicates, compare_playlists, find_replaced_tracks). Be visual: chart every table of 3+
-rows as its `Chart:` line says, one chart per answer; comment on it, don't repeat it. Never browse
+rows as its `Chart:` line says, one chart per answer, styled as explain('chart style') says; comment on it, don't repeat it. Never browse
 Spotify's website or read the cache file. When a term needs explaining, call explain(term).
 Many artists lack genres: offer fill_genres; compilations and reissues date songs by the album:
 offer fill_years. Start either only with their OK.
@@ -135,17 +136,17 @@ def _years_hint(conn) -> str:
 apps = Apps()
 apps.add_html_resource(
     OVERVIEW_URI,
-    (Path(__file__).parent / "ui" / "overview.html").read_text(encoding="utf-8"),
+    theme.template("overview"),
     name="Tailorlist overview",
 )
 apps.add_html_resource(
     PLAYLIST_URI,
-    (Path(__file__).parent / "ui" / "playlist.html").read_text(encoding="utf-8"),
+    theme.template("playlist"),
     name="Tailorlist playlist",
 )
 apps.add_html_resource(
     DRAFT_URI,
-    (Path(__file__).parent / "ui" / "draft.html").read_text(encoding="utf-8"),
+    theme.template("draft"),
     name="Tailorlist draft",
 )
 

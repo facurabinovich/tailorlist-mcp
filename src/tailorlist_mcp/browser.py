@@ -16,9 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tailorlist_mcp import settings
+from tailorlist_mcp import settings, theme
 
-_UI = Path(__file__).parent / "ui"
 _PLACEHOLDER = '<script id="tailorlist-data" type="application/json">null</script>'
 
 
@@ -27,9 +26,9 @@ def page_path(kind: str = "overview") -> Path:
 
 
 def write_page(data: dict, path: Path | None = None, kind: str = "overview") -> Path:
-    """Write the dashboard (ui/<kind>.html) with `data` embedded. Returns the file path."""
+    """Write the dashboard (ui/<kind>.html, themed by theme.py) with `data` embedded. Returns the file path."""
     path = path or page_path(kind)
-    html = (_UI / f"{kind}.html").read_text(encoding="utf-8")
+    html = theme.template(kind)
     # "</" inside JSON would end the script tag early.
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     html = html.replace(_PLACEHOLDER, f'<script id="tailorlist-data" type="application/json">{payload}</script>')

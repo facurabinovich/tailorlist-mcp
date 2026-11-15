@@ -1,56 +1,20 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tailorlist setup</title>
+<!--TAILORLIST_HEAD-->
 <style>
-  :root { --bg:#121212; --panel:#181818; --card:#282828; --line:#333; --text:#fff; --muted:#B3B3B3;
-    --dim:#888; --accent:#1DB954; --brand:#8FBF7A; --err:#ff6b6b; }
-  * { box-sizing:border-box; }
-  html, body { margin:0; background:var(--bg); color:var(--text);
-    font-family:"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { padding:20px 18px 40px; max-width:720px; margin:0 auto; line-height:1.5; }
-  a { color:var(--accent); }
-  .brand { border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:18px; }
-  .wordmark { font-size:1.6rem; font-weight:800; letter-spacing:-0.03em; }
-  .wordmark span { color:var(--brand); }
-  .tagline { color:var(--dim); font-size:.88rem; font-style:italic; margin-left:10px; }
-  h1 { font-size:1.3rem; margin:0 0 4px; }
-  .lead { color:var(--muted); margin:0 0 18px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 18px; margin-bottom:10px; }
-  .intro { border-color:var(--accent); }
-  .step { display:flex; gap:14px; }
-  .num { flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#000;
-    font-weight:800; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
-  .step h3 { margin:2px 0 4px; font-size:1rem; }
-  .step p, .intro p { margin:0; color:var(--muted); font-size:.9rem; }
-  .intro h3 { margin:0 0 4px; font-size:1rem; }
-  code { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:.85rem; color:var(--text); word-break:break-all; }
-  strong { color:var(--text); }
-  button, .btn { background:var(--accent); color:#000; border:0; border-radius:999px; padding:8px 18px;
-    font:inherit; font-weight:700; cursor:pointer; text-decoration:none; display:inline-block; }
-  button.small { padding:2px 12px; font-size:.78rem; margin-left:6px; }
-  .actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:16px 0; }
-  form { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-top:16px; }
-  label { font-weight:700; display:block; margin-bottom:8px; }
-  input[type=text] { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--line);
-    border-radius:8px; padding:10px 12px; font:inherit; font-family:ui-monospace, Consolas, monospace; margin-bottom:12px; }
-  .error { color:var(--err); font-weight:600; margin:0 0 10px; }
-  details { margin-top:22px; color:var(--muted); font-size:.9rem; }
-  summary { cursor:pointer; font-weight:700; color:var(--text); }
-  li { margin:8px 0; }
+  .redirect { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 </style>
 </head>
-<body>
-<div class="brand"><span class="wordmark">tailor<span>list</span></span><span class="tagline">set up once, in about 3 minutes</span></div>
+<body class="narrow">
+<!--TAILORLIST_BRAND-->
 <h1>Connect Tailorlist to your Spotify</h1>
-<p class="lead">Follow the steps, then paste your Client ID at the bottom.</p>
-<div class="card intro">{{INTRO}}</div>
+<p class="lead">Set up once, in about 3 minutes. Follow the steps, then paste your Client ID at the bottom.</p>
+<div class="card accent intro">{{INTRO}}</div>
 {{STEPS}}
 <div class="actions">
   <a class="btn" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Open the Spotify dashboard</a>
-  <span>Redirect URI: <code id="redirect">{{REDIRECT}}</code><button class="small" type="button" id="copy" hidden>Copy</button></span>
+  <span class="redirect">Redirect URI: <code id="redirect">{{REDIRECT}}</code><button class="small" type="button" id="copy" hidden>Copy</button></span>
 </div>
 <form method="post" action="/setup">
   <label for="client_id">Your Client ID</label>
@@ -63,6 +27,7 @@
   <summary>Something went wrong?</summary>
   <ul>{{TROUBLE}}</ul>
 </details>
+<!--TAILORLIST_FOOTER-->
 <script>
   var b = document.getElementById("copy");
   if (b && navigator.clipboard) {

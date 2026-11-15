@@ -80,7 +80,9 @@ def find_orphans(conn: sqlite3.Connection, playlists: list[str] | None = None, l
     liked_tracks = frame[frame["playlist_id"] == store.LIKED_ID].drop_duplicates("track_id")
     orphans = liked_tracks[~liked_tracks["track_id"].isin(in_playlists)]
     if orphans.empty:
-        return f"No orphans: all {len(liked_tracks):,} Liked Songs are in at least one loaded playlist."
+        n = len(liked_tracks)
+        return ("No orphans: your only Liked Song is in a loaded playlist." if n == 1
+                else f"No orphans: all {n:,} Liked Songs are in at least one loaded playlist.")
 
     # Candidates: the chosen playlists, or all loaded ones; only the user's own when the cache knows who they
     # are (Liked Songs is saved with the user as owner). Collaborative playlists are not recorded, so they count as others'.

@@ -19,8 +19,6 @@ Nothing running.
 - **Doubtful years: check them on the web with Claude** (the tools are done, see Done). After the
   full `fill_years` run: count the doubtful ones and try the flow on a batch of 10-20 in Claude
   Desktop (current year -> year per source, `set_year` after the user's OK).
-- **Unified design** (asked by Facu 2026-11-15): one stylesheet and brand header for every page,
-  chart rules for Claude (`explain("chart style")`), `DESIGN.md`. In progress.
 
 ## Phase 4: audio
 
@@ -112,6 +110,19 @@ Plan:
 
 ## Done
 
+### Unified design (2026-11-15)
+
+Asked by Facu: one look for everything the MCP produces, like the original app. `ui/theme.css`
+(tokens and shared components) and `theme.py` (the head, brand header and footer every page
+gets; `simple_page` for one-card pages); the three dashboards, the setup page and the login
+result pages all go through it. Plus Jakarta Sans is embedded (`ui/fonts/`, OFL), so pages load
+nothing from the network. Chart rules for Claude live in `explain("chart style")` (the server
+instructions point to it) with a six-colour series palette checked for colour-blind separation
+on the dark surfaces. `DESIGN.md` has the tokens, the page skeleton and the checklist for new
+pages. Checked: tests (no raw colours outside theme.css, every page complete) and screenshots of
+the six pages with sample data. To check after a server restart: that Claude Code doesn't cut the
+instructions (2,387 characters) and that Claude follows the chart style.
+
 ### Wave 3 (2026-11-15)
 
 - **`merge_playlists(playlists, name)` / `split_playlist(playlist, by)`** (`merge_split.py`): both
@@ -119,7 +130,8 @@ Plan:
   playlist (439 tracks, 6 decade groups).
 - **`find_orphans(playlists, limit)`** (`orphans.py`): Liked Songs in no loaded playlist, with the
   user's playlist that fits best (share of the playlist in the same genre family + share in the
-  same decade, at least 0.5 of 2). Not checked on real data: Liked Songs wasn't loaded.
+  same decade, at least 0.5 of 2). Real run: Facu's Liked Songs holds 1 track (already in a
+  playlist), so the suggestions were only exercised by the tests.
 - **`set_year` / `set_genre`** (`corrections.py`): manual corrections that win over MusicBrainz,
   Spotify and the album year; `fill_years` never overwrites them. Live, demo and acoustic takes
   get a per-recording year (`tracks.manual_year`). `original_years.source` records how each year

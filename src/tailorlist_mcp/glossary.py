@@ -6,6 +6,7 @@ user asks what a number means.
 """
 from __future__ import annotations
 
+from tailorlist_mcp import theme
 from tailorlist_mcp.analysis.genres import GENRE_FAMILIES
 
 
@@ -66,6 +67,36 @@ TERMS: dict[str, tuple[tuple[str, ...], str]] = {
         "Organized (done): tracks already placed in a playlist built with Tailorlist (written from a draft group) "
         "or assigned by hand. They leave the pool of the next grouping and count toward organize_progress's %."),
 }
+
+
+def _chart_style() -> str:
+    """The chart guide, built from theme.py's constants so the hex values live in one place."""
+    series = ", ".join(theme.SERIES)
+    return (
+        "Tailorlist chart style, for every chart you draw from Tailorlist data:\n"
+        f"- Surface: always draw on Tailorlist's dark card, whatever the host's theme: page {theme.BG}, card {theme.CARD} "
+        f"with a 1px {theme.LINE} border and 14px radius. Titles and values {theme.TEXT}, labels and axes {theme.MUTED}, "
+        f"gridlines {theme.LINE} (thin, horizontal only), no chart border.\n"
+        "- Font: Plus Jakarta Sans, else the system sans; titles weight 800.\n"
+        f"- One series: {theme.ACCENT}. To highlight one bar, keep it green and make the rest {theme.MUTED_BAR}.\n"
+        f"- Several series, in this fixed order, never cycled or reshuffled: {series}. From the 7th on, fold into "
+        f"\"Other\" ({theme.SERIES_OTHER}). A playlist, genre or decade keeps its colour across the charts of a conversation.\n"
+        f"- Magnitude (heatmaps): one green ramp, darker = less, {theme.ACCENT} = most. Never a rainbow.\n"
+        "- Form: a ranking is horizontal bars sorted from most to least, value at the end of each bar. Decades, years and "
+        "months are vertical bars or a line in time order, never sorted by value. Parts of a whole (5 parts or fewer): "
+        "one stacked bar, not a pie. Two dimensions (decade by playlist): stacked bars or small multiples. Never two "
+        "y-axes, never 3D.\n"
+        "- Marks: bars with 4px rounded ends and a 2px gap; lines 2px; a legend when there are 2 or more series; write "
+        "the value on each bar when there are 12 bars or fewer.\n"
+        "- Words: the title says the finding (\"Half your library is from the 2000s\"), a small caption says the scope "
+        "(which playlists, how many tracks). Text is never painted in a series colour.\n"
+        f"- Signature: bottom right, small: \"Tailorlist\" followed by a dot in {theme.BRAND}.\n"
+        "- Numbers: thousands separators, durations as h:mm, popularity as whole numbers.\n"
+        "- A host that can't draw: show the table (and its `bar` column when it has one)."
+    )
+
+
+TERMS["chart style"] = (("charts", "chart", "design"), _chart_style())
 TERMS["genre families"] = (TERMS["genre families"][0], "Genre families: " + _families())
 
 
