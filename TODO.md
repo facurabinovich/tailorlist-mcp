@@ -1,8 +1,10 @@
 # TODO
 
 Everything that is pending, in the order we plan to do it. Phases and their measurements live in
-[PLAN.md](PLAN.md); the tool list in [TOOLS.md](TOOLS.md). Each item still needs its own plan
-and Facu's OK before it is built, unless it is listed under "In progress".
+[PLAN.md](PLAN.md); the tool list in [TOOLS.md](TOOLS.md). Every pending item has its plan in
+[plans/](plans/README.md) (written 2026-11-16: the order, what can run in parallel, the rules for
+whoever builds it, and the decisions waiting for Facu). Each item still needs Facu's OK before
+it is built, unless it is listed under "In progress".
 
 Contents: [In progress](#in-progress) · [Next](#next) · [Phase 4: audio](#phase-4-audio) ·
 [Phase 5: launch](#phase-5-launch) · [Later](#later) ·
