@@ -17,9 +17,9 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, drafts, export, facts, genre_fill,
-                            glossary, health, menu, merge_split, orphans, progress, semantic, years, queries, settings,
-                            setup_guide, store, theme,
+from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, demo, drafts, export, facts,
+                            genre_fill, glossary, health, menu, merge_split, orphans, progress, semantic, years, queries,
+                            settings, setup_guide, store, theme,
                             write)
 from tailorlist_mcp import tour as tour_script
 from tailorlist_mcp.sources import spotify_auth, spotify_setup
@@ -57,6 +57,8 @@ to date, often a newer remaster), keep the saved ones, or a mix. Never delete pl
 undo_last_write reverts the last add, remove, replace, sort or dedupe. reset_progress deletes the
 organizing progress: only with explicit consent.
 
+No Spotify app, or just trying it: offer load_demo.
+
 Link to Spotify whenever a tool gives you a link.
 """
 
@@ -73,6 +75,12 @@ def _client() -> SpotifyClient:
     except spotify_auth.NotLoggedIn as exc:
         raise ToolError(f"{exc} Call connect_spotify to log in.") from exc
     return SpotifyClient()
+
+
+def _connected() -> bool:
+    """Whether a Spotify login is saved (no network)."""
+    token = spotify_auth.load_token()
+    return bool(token and token.get("access_token"))
 
 
 def _spotify_call(fn):
@@ -95,6 +103,12 @@ def _dashboard_result(data: dict, intro: str = "", kind: str = "overview", summa
     open_browser: False refreshes the page file without opening another tab (edits of a draft).
     """
     parts = [intro] if intro else []
+    with closing(store.connect()) as conn:
+        demo_on = demo.is_demo(conn)
+        if demo_on:
+            parts.insert(0, demo.status(conn))
+            data = {**data, "demo": True}
+            page_data = {**page_data, "demo": True} if page_data else None
     if not data.get("empty"):
         page = browser.write_page(page_data or data, kind=kind)
         opened = browser.open_in_browser(page) if open_browser else False
@@ -181,7 +195,7 @@ async def load_playlists(playlists: list[str], ctx: Context, force: bool = False
             data = dashboard.overview_data(conn)
             hint = _genres_hint(conn) + _years_hint(conn)
         data["load"] = loaded["results"]
-        lines = []
+        lines = ["- The demo collection was removed: it never mixes with your own playlists."] if loaded["cleared_demo"] else []
         for r in loaded["results"]:
             if r.get("status") == "loaded":
                 lines.append(f"- {r['name']}: loaded, {r['tracks']} tracks" + (f", {r['skipped']} skipped (episodes/local files)" if r["skipped"] else ""))
@@ -574,9 +588,32 @@ def list_my_playlists() -> dict:
     Show the list to the user and ask which playlists they want to load before calling
     load_playlists.
     """
+    with closing(store.connect()) as conn:
+        if demo.is_demo(conn) and not _connected():
+            return demo.listing(conn)
     client = _client()
     with closing(store.connect()) as conn:
         return _spotify_call(lambda: collection.list_playlists(client, conn))
+
+
+@mcp.tool()
+def load_demo() -> str:
+    """Load a demo collection of invented artists and songs, so everything can be tried without a
+    Spotify account. It never mixes with the user's own playlists: it is refused when those are
+    loaded, and loading their own playlists later removes it. Writing to Spotify is off for it.
+    Calling it again reloads the demo. Offer it when the user has no Spotify app or wants to try
+    Tailorlist first.
+    """
+    with closing(store.connect()) as conn:
+        try:
+            loaded = demo.load(conn)
+        except demo.DemoError as exc:
+            raise ToolError(str(exc)) from exc
+    lines = "\n".join(f"- {p['name']}: {p['tracks']} tracks" for p in loaded["playlists"])
+    return ("Demo collection loaded. It is made of invented artists and songs, built to have duplicates, "
+            f"versions, missing genres and more to find. Playlists:\n{lines}\n"
+            "Next: call what_can_i_do to see what to try (library_health, show_overview, group_tracks...). "
+            "Writing to Spotify is off for the demo; connect_spotify switches to the user's own library.")
 
 
 @mcp.tool()
@@ -755,11 +792,15 @@ async def find_replaced_tracks(playlists: list[str] | None = None, limit: int = 
         playlists: names, IDs or links; default all loaded playlists.
         limit: rows per list (default 50, max 500).
     """
-    client = _client()
+    with closing(store.connect()) as conn:
+        demo_on = demo.is_demo(conn)
+    client = None if demo_on else _client()
 
     def work() -> str:
         with closing(store.connect()) as conn:
             try:
+                if client is None:    # the demo: answered from the cache, nothing is asked of Spotify
+                    return demo.FILLED_IN + "\n" + queries.find_replaced_tracks(conn, playlists, limit)
                 collection.relink_popularity_zero(client, conn)  # tracks loaded before this check existed
                 return queries.find_replaced_tracks(conn, playlists, limit, client=client)
             except (queries.QueryError, dashboard.PlaylistNotFound) as exc:
@@ -784,7 +825,14 @@ def compare_playlists(playlists: list[str] | None = None) -> str:
 # ---------------------------------------------------------------- Phase 3: writing (preview tools + confirm_write)
 
 async def _write_tool(fn) -> str:
-    """Run a preview/confirm function with a Spotify client and the cache; its errors become tool errors."""
+    """Run a preview/confirm function with a Spotify client and the cache; its errors become tool errors.
+
+    Every write tool goes through here, so this is where the demo collection is refused."""
+    with closing(store.connect()) as conn:
+        try:
+            write.refuse_demo(conn)
+        except write.WriteError as exc:
+            raise ToolError(str(exc)) from exc
     client = _client()
 
     def work() -> str:
@@ -986,6 +1034,8 @@ def fill_genres() -> str:
     with closing(store.connect()) as conn:
         if not conn.execute("SELECT 1 FROM artists LIMIT 1").fetchone():
             raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
+        if demo.is_demo(conn):
+            return demo.FILLED_IN
         return genre_fill.describe(genre_fill.FILL.start(conn))
 
 
@@ -1004,6 +1054,8 @@ def fill_years() -> str:
     with closing(store.connect()) as conn:
         if not conn.execute("SELECT 1 FROM tracks LIMIT 1").fetchone():
             raise ToolError("Nothing loaded yet. Use list_my_playlists, ask which playlists to load, then load_playlists.")
+        if demo.is_demo(conn):
+            return demo.FILLED_IN
         status = years.FILL.start(conn)
         return years.describe(status, years.moved_tracks(conn))
 

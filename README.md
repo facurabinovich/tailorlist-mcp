@@ -49,7 +49,8 @@ Management", and then you only need their Client ID.
 
 Available now, grouped by what they do:
 
-- **Setup and data:** `connect_spotify`, `list_my_playlists`, `load_playlists` (playlists and
+- **Setup and data:** `load_demo` (a demo collection of invented artists and songs, to try
+  everything without a Spotify account), `connect_spotify`, `list_my_playlists`, `load_playlists` (playlists and
   your Liked Songs), `unload_playlists`, `forget_my_data`
 - **Dashboards:** `show_overview`, `show_playlist`, `show_draft`
 - **Questions (data tools):** `what_can_i_do` (the menu, plus what is worth doing in your

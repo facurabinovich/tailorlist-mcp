@@ -170,6 +170,7 @@
 
   function render(data) {
     const app = document.getElementById("app");
+    document.getElementById("demo-badge").hidden = !data.demo;
     current = data;
     if (data.empty || !data.kpis) {
       app.innerHTML = `<div class="empty">${data.name ? esc(data.name) + " has no tracks in the cache." : "Nothing to show yet. Ask Claude to show a playlist."}</div>`;

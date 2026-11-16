@@ -151,6 +151,7 @@
   // ---------------------------------------------------------------- render
   function render(data) {
     const app = document.getElementById("app");
+    document.getElementById("demo-badge").hidden = !data.demo;
     if (data.preview) {
       const p = data.preview;
       app.innerHTML = `<div class="plname">Preview</div><p class="meta">Nothing was saved yet.</p>` +

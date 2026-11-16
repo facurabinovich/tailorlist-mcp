@@ -35,7 +35,7 @@ import time
 from collections.abc import Callable
 from datetime import date
 
-from tailorlist_mcp import collection, drafts, progress, store, years
+from tailorlist_mcp import collection, demo, drafts, progress, store, years
 from tailorlist_mcp.analysis import duplicates
 from tailorlist_mcp.export import track_id_from, track_meta
 from tailorlist_mcp.queries import _table
@@ -50,6 +50,12 @@ _PLAYLIST_RE = re.compile(r"^[A-Za-z0-9]{22}$|playlist[/:]([A-Za-z0-9]{22})")
 
 class WriteError(ValueError):
     """The request can't be done as asked. The message says why."""
+
+
+def refuse_demo(conn: sqlite3.Connection) -> None:
+    """Every tool that previews or writes to Spotify starts here: the demo collection has no Spotify behind it."""
+    if demo.is_demo(conn):
+        raise WriteError(demo.ONLY_FOR_DEMO)
 
 
 def uri(track_id: str) -> str:

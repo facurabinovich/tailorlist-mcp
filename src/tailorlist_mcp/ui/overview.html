@@ -124,6 +124,7 @@
   // ---------------------------------------------------------------- render
   function render(data) {
     const app = document.getElementById("app");
+    document.getElementById("demo-badge").hidden = !data.demo;
     if (data.empty || !data.kpis) {
       app.innerHTML = `<div class="empty">Nothing loaded yet. Ask Claude to load some playlists.</div>`;
       reportSize();

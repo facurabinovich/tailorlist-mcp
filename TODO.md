@@ -41,7 +41,7 @@ already ported and not wired to any tool).
   needs Extended Quota: an organization with ~250k monthly users; Development Mode is 5 users
   per app and the owner needs Premium). Reading a playlist from its link without the user's own
   app is not possible through the API, and scraping the web player breaks the terms. A ladder:
-  0. Demo mode (below): no account at all.
+  0. Demo mode (done, `load_demo`): no account at all.
   1. Import mode: analyze a file or a pasted list (Spotify's own "Download your data" export,
      a CSV from an export tool, "Artist - Song" text). Names only, so: duplicates and versions,
      top artists, MusicBrainz genres and years, decades, drafts, text export. No popularity,
@@ -53,9 +53,6 @@ already ported and not wired to any tool).
 - **Release**: version is 0.0.1 with no tags or changelog; `uvx` install needs a PyPI release.
 - README with the Spotify app walkthrough, Claude Desktop extension (`.mcpb`) if feasible,
   2-minute demo video, post.
-- **Demo mode.** A sample collection to try the tools without creating a Spotify app (the
-  biggest entry friction). The data must be synthetic, for the same reason the Kaggle DB was
-  dropped.
 - **Plugin with a skill.** Package the MCP with a skill that guides the curation flow.
 - **MCP Apps**: retest in Claude Desktop (they did not render from local stdio servers on
   2026-11-09).
@@ -113,8 +110,17 @@ Plan:
   chart hint and the call that digs deeper; a fact is left out when its data is thin.
 - **`tour`** (`tour.py`): a guided story of the collection in 8 chapters, as a prompt and as a
   tool (hosts hide prompts). A test checks that every tool call in the script is registered.
+- **Demo mode: `load_demo()`** (`demo.py`): a deterministic synthetic collection (9 playlists
+  with Liked Songs, 507 tracks, invented artists and songs; no real catalogue data) with
+  duplicates, versions, compilation albums, artists without genres, replaced tracks and orphans
+  planted so every tool has something to show. Demo and real data never mix: `load_demo` is
+  refused over real playlists and `load_playlists` removes the demo. Write tools refuse it,
+  `fill_genres` / `fill_years` / `find_replaced_tracks` make no network calls on it, and the
+  dashboards show a "Demo data" badge. Server instructions are now 2,440 characters: check after
+  a restart that Claude Code doesn't cut them.
 - Checked: tests on Python 3.12 and 3.10, plus `fun_facts` (1.5 s) and an `assign_tracks` round
-  on a copy of Facu's cache. Not checked yet: a real tour and a real semantic grouping in Claude
+  on a copy of Facu's cache, and the demo end to end on a temporary cache (with a screenshot of
+  its overview). Not checked yet: a real tour and a real semantic grouping in Claude
   Desktop.
 
 ### Unified design (2026-11-15)

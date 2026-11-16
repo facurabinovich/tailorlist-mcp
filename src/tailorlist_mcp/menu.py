@@ -10,13 +10,14 @@ from __future__ import annotations
 import sqlite3
 from typing import Callable
 
-from tailorlist_mcp import dashboard, health, orphans, progress, store
+from tailorlist_mcp import dashboard, demo, health, orphans, progress, store
 
 MAX_SUGGESTIONS = 3
 
 #: (section title, [(line the user reads, tools behind it)])
 MENU: list[tuple[str, list[tuple[str, tuple[str, ...]]]]] = [
     ("Get started", [
+        ("Try it with a demo collection, no Spotify account needed", ("load_demo",)),
         ("Connect your Spotify account", ("connect_spotify",)),
         ("See your playlists and choose which ones to load (or unload)", ("list_my_playlists", "load_playlists", "unload_playlists")),
         ("Read the tracks of one playlist", ("get_playlist_tracks",)),
@@ -164,7 +165,10 @@ def status_line(conn: sqlite3.Connection) -> str:
     tracks = conn.execute("SELECT COUNT(DISTINCT track_id) FROM playlist_tracks").fetchone()[0]
     if not playlists:
         return ("Nothing is loaded yet. The first step is choosing playlists: list_my_playlists shows them "
-                "(if they are not connected to Spotify yet, connect_spotify comes first).")
+                "(if they are not connected to Spotify yet, connect_spotify comes first). "
+                "With no Spotify account, load_demo loads a demo collection to try everything.")
+    if demo.is_demo(conn):
+        return demo.status(conn)
     return f"Loaded: {_n(playlists, 'playlist', 'playlists')}, {_n(tracks, 'unique track', 'unique tracks')}."
 
 

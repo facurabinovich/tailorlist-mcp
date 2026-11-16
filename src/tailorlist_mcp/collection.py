@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tailorlist_mcp import store
+from tailorlist_mcp import demo, store
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
 _ID_RE = re.compile(r"(?:playlist[/:])?([A-Za-z0-9]{22})")
@@ -129,6 +129,7 @@ def load_playlists(
     Spotify is read in parallel; the database is written from this thread only.
     """
     results: list[dict | None] = [None] * len(refs)
+    cleared_demo = demo.clear(conn)       # demo and real playlists never mix
     known = store.loaded_snapshots(conn)
     done = 0
     with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
@@ -171,7 +172,7 @@ def load_playlists(
         relink_popularity_zero(client, conn)
     except SpotifyError as exc:
         results.append({"status": "warning", "error": f"Replaced versions not checked: {exc}"})
-    return {"results": results, "collection": overview(conn)}
+    return {"results": results, "collection": overview(conn), "cleared_demo": cleared_demo}
 
 
 def relink_popularity_zero(client: SpotifyClient, conn: sqlite3.Connection, now: int | None = None) -> int:

@@ -42,6 +42,7 @@ dashboards, data tools for everything else).
 | `set_year(track, year, source?, artist?)` | (new, from the backlog) a manual year that wins over MusicBrainz and the album year, stored with its source; per song, or per recording for live, demo and acoustic takes. `year=None` removes it | ✅ |
 | `set_genre(artist, genres, source?)` | (new) manual genres for an artist; they win over Spotify's and MusicBrainz's. An empty list removes them | ✅ |
 | `fetch_audio_features(playlists?)` | Enrich page: ReccoBeats with progress, retry of failed tracks, cancel, coverage stats | 4 |
+| `load_demo()` | (new) a synthetic collection (9 playlists, 507 tracks of invented artists) with duplicates, versions, compilations, missing genres, replaced tracks and orphans planted; never mixes with real playlists, write tools refuse it, dashboards show a "Demo data" badge | ✅ |
 
 ### Dashboards (fixed views)
 

@@ -78,7 +78,7 @@ def brand(title: str) -> str:
     return (
         '<header class="brand">'
         f'<div><span class="wordmark">Tailorlist<span class="dot">.</span></span>'
-        f'<span class="tagline">{TAGLINE}</span></div>'
+        f'<span class="tagline">{TAGLINE}</span> <span class="badge warn" id="demo-badge" hidden>Demo data</span></div>'
         f'<div class="brand-title">{html.escape(title)}</div></header>'
     )
 
