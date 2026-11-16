@@ -116,12 +116,11 @@ Plan:
   planted so every tool has something to show. Demo and real data never mix: `load_demo` is
   refused over real playlists and `load_playlists` removes the demo. Write tools refuse it,
   `fill_genres` / `fill_years` / `find_replaced_tracks` make no network calls on it, and the
-  dashboards show a "Demo data" badge. Server instructions are now 2,440 characters: check after
-  a restart that Claude Code doesn't cut them.
+  dashboards show a "Demo data" badge. Server instructions are now 2,440 characters.
 - Checked: tests on Python 3.12 and 3.10, plus `fun_facts` (1.5 s) and an `assign_tracks` round
   on a copy of Facu's cache, and the demo end to end on a temporary cache (with a screenshot of
-  its overview). Not checked yet: a real tour and a real semantic grouping in Claude
-  Desktop.
+  its overview). After the server restart Facu tried it in Claude Code and
+  confirmed it works (2026-11-16): the instructions arrive whole and the new tools respond.
 
 ### Unified design (2026-11-15)
 
@@ -133,8 +132,7 @@ nothing from the network. Chart rules for Claude live in `explain("chart style")
 instructions point to it) with a six-colour series palette checked for colour-blind separation
 on the dark surfaces. `DESIGN.md` has the tokens, the page skeleton and the checklist for new
 pages. Checked: tests (no raw colours outside theme.css, every page complete) and screenshots of
-the six pages with sample data. To check after a server restart: that Claude Code doesn't cut the
-instructions (2,387 characters) and that Claude follows the chart style.
+the six pages with sample data. Confirmed by Facu after a server restart (2026-11-16).
 
 ### Wave 3 (2026-11-15)
 
@@ -173,8 +171,7 @@ Asked by Facu: the analysis should be visual and fun, with many charts, in any h
 `charts.py`: `collection_stats`, `compare_playlists` and `find_tracks` end with a one-line
 `Chart:` hint (what to draw from that table); `collection_stats` without a split has a text
 `bar` column for hosts that can't draw; the server instructions say to chart every table of 3+
-rows, one chart per answer. To check after a server restart: that Claude Code doesn't cut the
-instructions (2,353 characters).
+rows, one chart per answer. Confirmed after a server restart (2026-11-16, with the instructions at 2,440 characters).
 
 ### Wave 2 (2026-11-15)
 
