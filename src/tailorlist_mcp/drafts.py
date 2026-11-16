@@ -159,6 +159,8 @@ def draft_label(d: dict) -> str:
     src = d.get("source") or {}
     if d["mode"] == "merge":
         return "Merge of " + " + ".join(src.get("playlists") or ["playlists"])
+    if d["mode"] == "semantic":
+        return "By Claude: " + (src.get("criteria") or "your criteria")
     if src.get("kind") == "split":
         by = {"decade": "decade", "genre_family": "genre family", "both": "genre family and decade"}.get(d["by"], d["by"])
         return f"Split of {src['playlist']} by {by}"

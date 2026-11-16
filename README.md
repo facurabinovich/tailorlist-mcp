@@ -56,8 +56,10 @@ Available now, grouped by what they do:
   library right now), `library_health` (everything that is off, in one report),
   `get_playlist_tracks`, `collection_stats`, `find_tracks`, `find_duplicates`, `find_orphans`
   (Liked Songs in no playlist, with a suggested playlist for each), `find_replaced_tracks`,
-  `compare_playlists`, `explain`
-- **Building playlists (drafts):** `group_tracks`, `merge_playlists`, `split_playlist`,
+  `compare_playlists`, `fun_facts` (ready-made curiosities), `tour` (a guided story of the
+  collection in charts; also a prompt), `explain`
+- **Building playlists (drafts):** `group_tracks`, `assign_tracks` (groups by mood or occasion:
+  Claude places the tracks in batches), `merge_playlists`, `split_playlist`,
   `edit_draft`, `organize_progress`,
   `reset_progress`, `export_tracks`
 - **Writing to Spotify:** `create_playlist`, `write_draft`, `add_tracks`, `remove_tracks`,

@@ -17,9 +17,11 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, TextContent
 
-from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, drafts, export, genre_fill, glossary,
-                            health, menu, merge_split, orphans, progress, years, queries, settings, setup_guide, store, theme,
+from tailorlist_mcp import (__version__, browser, collection, corrections, dashboard, drafts, export, facts, genre_fill,
+                            glossary, health, menu, merge_split, orphans, progress, semantic, years, queries, settings,
+                            setup_guide, store, theme,
                             write)
+from tailorlist_mcp import tour as tour_script
 from tailorlist_mcp.sources import spotify_auth, spotify_setup
 from tailorlist_mcp.sources.spotify_api import SpotifyClient, SpotifyError
 
@@ -428,6 +430,53 @@ def split_playlist(playlist: str, by: str = "decade", preview_only: bool = False
         return _draft_result(conn, d, intro=text)
 
 
+@apps.tool(resource_uri=DRAFT_URI)
+def assign_tracks(
+    draft: str | None = None,
+    assignments: dict[str, list[str]] | None = None,
+    criteria: str | None = None,
+    filters: drafts.GroupFilters | None = None,
+    include_done: bool = False,
+    batch: int = 50,
+) -> CallToolResult:
+    """Group tracks by criteria no rule can make (moods, occasions, activities): you place them, a batch at a time.
+
+    Use it when the user wants groups like "for running", "Sunday morning" or "dinner with friends".
+    First agree 3 to 8 group names with the user. Then loop:
+    1. Start: call with `criteria` (and `filters` to narrow the pool). It saves a draft with every track
+       waiting to be placed and returns the first batch (Track ID | Track | Artist | Year | Genres | Pop).
+    2. Place the batch with what you know of the music: call again with `draft` and `assignments`
+       ({group name: [track IDs]}). You get the progress and the next batch.
+    3. Repeat until it says nothing is left, then show_draft to review it with the user, edit_draft to
+       adjust, write_draft to save the playlists.
+    Leave out the tracks you don't recognise instead of guessing: they stay waiting (the user can skip
+    them at the end with edit_draft skip_unmatched). A track goes to one group only. IDs that are not
+    waiting (unknown, already placed) are skipped and listed. Also works on any draft that has unmatched
+    tracks. The dashboard doesn't open on these calls; nothing is written to Spotify.
+
+    Args:
+        draft: the draft ID ("d3") when continuing. Omit it to start a new draft.
+        assignments: {group name: track IDs from the batch}. Groups are created as needed. May be empty to just get the next batch.
+        criteria: starting only: a short text of what the groups are about, e.g. "moods for a road trip".
+        filters: starting only: playlists, decades and genre_families to narrow the pool (max 1,500 tracks).
+        include_done: starting only: include tracks already organized.
+        batch: how many waiting tracks to show (default 50, max 100).
+    """
+    with closing(store.connect()) as conn:
+        try:
+            report = None
+            if draft is None:
+                d = semantic.start(conn, criteria, filters, include_done)
+            else:
+                d = drafts.load_draft(conn, draft)
+                report = semantic.assign(conn, d, assignments)
+            text = semantic.result_text(conn, d, batch, report)
+            data = drafts.result_data(drafts.draft_data(conn, d))
+        except (queries.QueryError, dashboard.PlaylistNotFound, drafts.DraftError) as exc:
+            raise ToolError(str(exc)) from exc
+    return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data)
+
+
 mcp = MCPServer("tailorlist", instructions=INSTRUCTIONS, version=__version__, extensions=[apps])
 
 
@@ -439,6 +488,15 @@ START_PROMPT = menu.start_prompt()
             description="Your music curator introduces itself and lists what it can do with your Spotify library.")
 def start() -> str:
     return START_PROMPT
+
+
+TOUR_SCRIPT = tour_script.tour_text()
+
+
+@mcp.prompt(name="tour", title="A tour of your collection",
+            description="A guided tour of your Spotify collection in 6 to 8 charts, ending with things worth doing next.")
+def tour_prompt() -> str:
+    return TOUR_SCRIPT
 
 
 def _setup_text(setup_url: str | None, page_opened: bool) -> str:
@@ -660,6 +718,30 @@ def what_can_i_do() -> str:
     """
     with closing(store.connect()) as conn:
         return menu.what_can_i_do(conn)
+
+
+@mcp.tool()
+def fun_facts(playlists: list[str] | None = None, limit: int = facts.DEFAULT_LIMIT) -> str:
+    """Ready-made curiosities about the loaded playlists (or only the ones given): your decade, your
+    artist, listening age, oldest and newest song, hours of music, longest track, mainstream meter,
+    busiest month, the song in the most playlists, genre mix, the playlist that spans the most years,
+    the album you love most. Each comes with the real numbers, a chart hint and the call that digs
+    deeper. Reads the cache only.
+
+    Args:
+        playlists: names, IDs or links; default all loaded playlists.
+        limit: facts to return (default 8, max 14).
+    """
+    return _answer(facts.fun_facts, playlists, limit)
+
+
+@mcp.tool()
+def tour() -> str:
+    """A guided tour of the user's collection: the script of 6 to 8 chapters (size, decades, artists,
+    genres, growth, popularity, playlists compared, curiosities), each with the tool call to make and
+    the chart to draw. Call it when the user asks for a tour, a story or a visual summary of their library.
+    """
+    return TOUR_SCRIPT
 
 
 @mcp.tool()

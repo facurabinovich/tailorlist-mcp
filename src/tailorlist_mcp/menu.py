@@ -27,6 +27,8 @@ MENU: list[tuple[str, list[tuple[str, tuple[str, ...]]]]] = [
         ("Compare playlists: overlap, era, diversity", ("compare_playlists",)),
         ("Ask anything: \"my most-saved artists\", \"80s tracks under 3 minutes\"...", ("collection_stats", "find_tracks")),
         ("What any number or term means", ("explain",)),
+        ("A guided tour of your collection in charts", ("tour",)),
+        ("Fun facts about your library", ("fun_facts",)),
     ]),
     ("Clean it up", [
         ("Health check: everything that is off, in one report", ("library_health",)),
@@ -39,6 +41,7 @@ MENU: list[tuple[str, list[tuple[str, tuple[str, ...]]]]] = [
     ]),
     ("Build better playlists", [
         ("Group your tracks by decade, genre family or specific genres into drafts", ("group_tracks",)),
+        ("Group by mood or occasion (\"for running\", \"Sunday morning\"): Claude places the tracks, you review", ("assign_tracks",)),
         ("Review and tweak the drafts together, then save them to Spotify", ("show_draft", "edit_draft", "write_draft", "create_playlist")),
         ("Add, remove, sort or de-duplicate tracks in existing playlists (always previewed, undoable)",
          ("add_tracks", "remove_tracks", "sort_playlist", "dedupe_playlist")),

@@ -61,6 +61,8 @@ dashboards, data tools for everything else).
 | `find_duplicates(playlists?, kind?)` | exact duplicates (same Spotify ID twice, across or inside playlists) and different versions (same song, different IDs), with the playlists each one is in | ✅ |
 | `find_orphans(playlists?, limit?)` | (new) Liked Songs that are in no loaded playlist, each with the playlist of the user's that fits best by genre family and decade, or "no clear fit" | ✅ |
 | `what_can_i_do()` | (new) the menu of everything Tailorlist does (the same text as the `start` prompt, from `menu.py`) plus up to 3 suggestions computed from the cache | ✅ |
+| `fun_facts(playlists?, limit?)` | (new) up to 14 ready-made curiosities (your decade, your artist, listening age, busiest month, the song in the most playlists...), each with its numbers, a chart hint and the call that digs deeper; a fact is left out when its data is thin | ✅ |
+| `tour()` | (new) the script of a guided tour in 8 chapters (size, decades, artists, genres, growth, popularity, playlists compared, curiosities), each with the tool call and the chart to draw; also the `tour` prompt, since hosts hide prompts | ✅ |
 | `library_health(playlists?)` | (new) one offline report of what is off: exact duplicates inside and across playlists, different versions, replaced and unplayable tracks, skipped items, artists without genres, songs not dated yet, doubtful compilation years (heuristic on the album title), near-identical playlists (80% of the smaller, at least 10 tracks); each with the tool that goes deeper | ✅ |
 | `find_replaced_tracks(playlists?)` | tracks with popularity 0: album versions Spotify replaced (with the version it plays now, from relinking) and tracks not playable in the user's country (with alternatives from search). Stats use the current version's popularity. Not in the original app | ✅ |
 | `explain(term)` | (the original's Glossary page) metric definitions, read when the user asks what a number means; moved out of the server instructions, which Claude Code truncated | ✅ |
@@ -71,6 +73,7 @@ dashboards, data tools for everything else).
 | Tool | Replaces | Phase |
 |---|---|---|
 | `group_tracks(mode, filters, …)` | My Clusters: pre-filters (playlists, decades, genre families, with a preview count) and the 3 modes: by category (decade / genre family / both), by specific genres (picked by family), by audio similarity (KMeans, auto k by elbow/silhouette or manual k, auto-named groups) ⏳4. Leaves out tracks already organized. Saves a **draft** and opens it | ✅ (KMeans ⏳4) |
+| `assign_tracks(draft?, assignments?, criteria?, filters?, …)` | (new) semantic grouping: Claude places tracks in groups by free criteria ("for running", "Sunday morning") in batches of 50 into a normal draft; tracks it doesn't recognise stay unplaced; max 1,500 tracks per draft | ✅ |
 | `merge_playlists(playlists, name?)` | (new) a draft with one group: the union of 2 or more playlists, each track once; reports the songs present in several versions | ✅ |
 | `split_playlist(playlist, by?, preview_only?)` | (new) a draft that splits one playlist by decade, genre family or both; the playlist stays untouched | ✅ |
 | `edit_draft(draft, changes)` | rename a group, move tracks, assign unmatched tracks, drop or merge groups, keep a group visible, skip the rest | ✅ |

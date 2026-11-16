@@ -33,10 +33,6 @@ already ported and not wired to any tool).
 - `sequence_tracks(curve)`: order a playlist by an energy/tempo curve.
 - **`scikit-learn` as an optional extra** (`tailorlist-mcp[audio]`): it is installed today and
   nothing uses it until this phase; the base install should stay light.
-- **Semantic grouping by Claude: `assign_tracks(draft, assignments)`.** Claude places tracks in
-  groups by free criteria ("for running", "Sunday morning"), in batches, into a normal draft.
-  Doesn't depend on ReccoBeats (which can shut down without notice), so it is also the plan B
-  for the audio mode.
 
 ## Phase 5: launch
 
@@ -65,10 +61,6 @@ already ported and not wired to any tool).
   2026-11-09).
 
 ## Later
-
-- **Visual analysis, next layers**: a `tour` prompt (a guided story of 6-8 charts: your decade,
-  your artists, how the collection grew, your rarest and most popular track, your listening
-  age) and a `fun_facts` tool with ready-made curiosities to tell.
 
 - **Listening history.** Top tracks/artists and recently played, crossed with the collection
   ("saved but never played"). Needs `user-top-read` and `user-read-recently-played` (a new login).
@@ -109,6 +101,21 @@ Plan:
 4. Navidrome third, if there is interest.
 
 ## Done
+
+### Wave 4 (2026-11-16)
+
+- **`assign_tracks(draft, assignments, criteria, filters)`** (`semantic.py`): semantic grouping.
+  Claude places tracks in groups by free criteria ("for running", "Sunday morning"), 50 at a
+  time, into a normal draft (`mode="semantic"`, label "By Claude: <criteria>"); tracks it doesn't
+  recognise stay unplaced instead of being guessed; max 1,500 tracks per draft. Doesn't depend on
+  ReccoBeats, so it is also the plan B for the audio mode.
+- **`fun_facts(playlists, limit)`** (`facts.py`): up to 14 curiosities, each with its numbers, a
+  chart hint and the call that digs deeper; a fact is left out when its data is thin.
+- **`tour`** (`tour.py`): a guided story of the collection in 8 chapters, as a prompt and as a
+  tool (hosts hide prompts). A test checks that every tool call in the script is registered.
+- Checked: tests on Python 3.12 and 3.10, plus `fun_facts` (1.5 s) and an `assign_tracks` round
+  on a copy of Facu's cache. Not checked yet: a real tour and a real semantic grouping in Claude
+  Desktop.
 
 ### Unified design (2026-11-15)
 
