@@ -14,11 +14,11 @@ Nothing running.
 
 ## Next
 
-- **Run `fill_years` on the whole library** (about 75 minutes, 112 of 2,811 songs dated on
-  2026-11-10) and count the doubtful years: that decides the next item.
-- **Doubtful years: check them on the web with Claude** (the tools are done, see Done). After the
-  full `fill_years` run: count the doubtful ones and try the flow on a batch of 10-20 in Claude
-  Desktop (current year -> year per source, `set_year` after the user's OK).
+- **Doubtful years: check them on the web with Claude** (the tools are done, see Done). The full
+  `fill_years` run finished on 2026-11-16: 2,774 of 2,811 songs dated, 724 tracks moved to an
+  earlier year, 41 doubtful tracks left (26 dated by ISRC only, 15 on compilation albums with no
+  earlier release found). Try the flow on them in Claude Desktop (current year -> year per
+  source, `set_year` after the user's OK).
 
 ## Phase 4: audio
 
