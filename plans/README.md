@@ -18,7 +18,7 @@ the plan; where a decision is Facu's, the plan says so under "Confirm with Facu 
 | 07 | [Import mode](07-import-mode.md) | nothing (Facu's export helps) | large | code |
 | 08 | [Release: version, changelog, PyPI, README](08-release.md) | 02-06 done or cut | medium | infra + docs |
 | 09 | [.mcpb, plugin with a skill, MCP Apps retest](09-packaging-mcpb-plugin-skill.md) | 08 | medium | packaging |
-| 10 | [Demo video and post](10-launch-content.md) | 08 | small | writing |
+| 10 | [Demo video, post, MCP directories](10-launch-content.md) | 08 | small | writing |
 | 11 | [Listening history](11-listening-history.md) | after launch | medium | code |
 | 12 | [Snapshots, diff, deeper undo](12-snapshots.md) | after launch | medium | code |
 | 13 | [Swap compilation tracks for the original album's](13-swap-compilation-tracks.md) | after launch | medium | code |

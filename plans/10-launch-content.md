@@ -60,7 +60,43 @@ that lets Claude reorganize your Spotify library" and a first comment with the t
 (the two-step write with a code, the content hash instead of the snapshot ID, MusicBrainz rate
 limits).
 
+## Directories to list it in (free; decided 2026-11-16)
+
+Facu decided: the MCP stays free and open source (no paid listing: the directories don't sell
+local stdio servers, the code is MIT and public, and Spotify's terms ask for non-commercial use).
+On launch day, register it in the MCP directories. For each one, check on the day how a server is
+submitted (a form, a pull request, a metadata file in the repo) and what it requires; the list
+below is from memory and may be out of date:
+
+- the official MCP registry (registry.modelcontextprotocol.io; it reads a `server.json` in the
+  repo and the PyPI package: check the current publishing guide);
+- Smithery, Glama, mcp.so, PulseMCP;
+- the "awesome MCP servers" lists on GitHub (a pull request each);
+- Claude Desktop's extensions directory, if the `.mcpb` of plan 09 was built (check its
+  submission rules).
+
+Write `docs/launch/directories.md`: one row per directory with the submission link, what it
+asked for, the date submitted and the resulting page. Submitting is Facu's action (his accounts);
+the executor prepares the texts (one-line and one-paragraph descriptions, tags, the install
+line, a screenshot from the demo) and any metadata file the repo needs.
+
+Donations: add an optional link in the README ("Support") and a `.github/FUNDING.yml`, once Facu
+has created the account he prefers (GitHub Sponsors or Ko-fi). Using the MCP never depends on it.
+
+## Other MCP clients (a short check before the posts say "works with ...")
+
+The server is a local stdio MCP server, so any client that runs local stdio servers can use it,
+not only Claude. Before the posts claim it, try the demo (`load_demo`, `show_overview`,
+`collection_stats`, `group_tracks`) in one or two other clients Facu has (for example Cursor,
+VS Code's agent mode, Codex CLI, Gemini CLI) and note for each: do the tools list, do the server
+instructions arrive, do the dashboards open in the browser, does the model draw charts. Clients
+that only accept remote MCP servers over HTTP (ChatGPT's connectors, as far as known on
+2026-11-16: verify) can't run it as is. Record the results in the README ("Works with") and
+only name clients that were tried. Tool texts say "Claude" in places: if another client works
+well, propose to Facu rewording them to "the assistant" (it is a wide text change; not part of
+this plan).
+
 ## Done when
 
-The three drafts and the script are in `docs/launch/`, Facu has read them, and TODO.md lists what
-is published and where.
+The three drafts, the script and `directories.md` are in `docs/launch/`, Facu has read them, and
+TODO.md lists what is published and where.
