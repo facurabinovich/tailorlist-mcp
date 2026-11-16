@@ -126,7 +126,10 @@ then in the main tree `git -C <worktree> diff --cached | git apply --3way`.
 - `demo.py`: the synthetic collection; `demo.is_demo(conn)`.
 - `menu.py`: `MENU` (renders `what_can_i_do` and the `start` prompt) and `CHECKS` (suggestions).
 
-## Decisions waiting for Facu (collected from the plans)
+## Decisions collected from the plans: all approved by Facu on 2026-11-16
+
+The "Confirm with Facu first" items listed here are answered: yes to each as proposed. Other points
+under that heading in a plan (step-0 results, numbers to share, things he must provide) still need him.
 
 1. 02: `fetch_audio_features` takes no `playlists` argument and has no cancel (the batch endpoint
    makes a whole library a 2-minute job). TOOLS.md had both.
